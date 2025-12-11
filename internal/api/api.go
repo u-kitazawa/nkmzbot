@@ -74,13 +74,19 @@ func (a *API) setupRoutes() {
 }
 
 func (a *API) Start() error {
-	// Setup CORS
-	handler := cors.New(cors.Options{
+	// Setup CORS - allow all origins for development, restrict in production
+	// Note: When AllowedOrigins is "*", AllowCredentials must be false for security
+	corsOptions := cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
-		AllowCredentials: true,
-	}).Handler(a.router)
+		AllowCredentials: false, // Set to false for security when using wildcard origin
+	}
+	
+	// For production, set specific origins and enable credentials:
+	// Example: AllowedOrigins: []string{"https://yourdomain.com"}, AllowCredentials: true
+	
+	handler := cors.New(corsOptions).Handler(a.router)
 
 	log.Printf("API server listening on http://%s", a.config.WebBind)
 	return http.ListenAndServe(a.config.WebBind, handler)
@@ -333,14 +339,24 @@ func (a *API) handleBulkDeleteCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var errors []string
+	successCount := 0
 	for _, name := range req.Names {
-		a.db.RemoveCommand(context.Background(), guildID, name)
+		if err := a.db.RemoveCommand(context.Background(), guildID, name); err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to delete '%s': %v", name, err))
+		} else {
+			successCount++
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "commands deleted",
-	})
+	response := map[string]interface{}{
+		"deleted": successCount,
+	}
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // Middleware

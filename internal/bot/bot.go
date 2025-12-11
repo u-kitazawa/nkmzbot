@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -426,8 +427,11 @@ func (b *Bot) handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCr
 }
 
 func parseGuildID(guildID string) int64 {
-	var id int64
-	fmt.Sscanf(guildID, "%d", &id)
+	id, err := strconv.ParseInt(guildID, 10, 64)
+	if err != nil {
+		log.Printf("Failed to parse guild ID '%s': %v", guildID, err)
+		return 0
+	}
 	return id
 }
 

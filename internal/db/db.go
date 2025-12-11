@@ -85,42 +85,50 @@ func (db *DB) RemoveCommand(ctx context.Context, guildID int64, name string) err
 
 func (db *DB) ListCommands(ctx context.Context, guildID int64, pattern string) ([]Command, error) {
 	var commands []Command
-	var rows interface {
-		Next() bool
-		Scan(dest ...interface{}) error
-		Close()
-		Err() error
-	}
-	var err error
 
 	if pattern != "" {
 		likePattern := "%" + pattern + "%"
-		rows, err = db.pool.Query(ctx,
+		rows, err := db.pool.Query(ctx,
 			"SELECT guild_id, name, response FROM commands WHERE guild_id = $1 AND (name ILIKE $2 OR response ILIKE $2) ORDER BY name",
 			guildID, likePattern,
 		)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var cmd Command
+			if err := rows.Scan(&cmd.GuildID, &cmd.Name, &cmd.Response); err != nil {
+				return nil, err
+			}
+			commands = append(commands, cmd)
+		}
+
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	} else {
-		rows, err = db.pool.Query(ctx,
+		rows, err := db.pool.Query(ctx,
 			"SELECT guild_id, name, response FROM commands WHERE guild_id = $1 ORDER BY name",
 			guildID,
 		)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cmd Command
-		if err := rows.Scan(&cmd.GuildID, &cmd.Name, &cmd.Response); err != nil {
+		if err != nil {
 			return nil, err
 		}
-		commands = append(commands, cmd)
-	}
+		defer rows.Close()
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+		for rows.Next() {
+			var cmd Command
+			if err := rows.Scan(&cmd.GuildID, &cmd.Name, &cmd.Response); err != nil {
+				return nil, err
+			}
+			commands = append(commands, cmd)
+		}
+
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	return commands, nil
