@@ -1,6 +1,6 @@
 # nkmzbot
 
-Discord ボットに加えて、Axum 製の Web UI を追加しました。
+Discord bot with REST API for managing custom commands.
 
 ## 必要な環境変数
 
@@ -9,20 +9,35 @@ Discord ボットに加えて、Axum 製の Web UI を追加しました。
 - WEB_BIND: Web サーバのバインドアドレス (例: `0.0.0.0:3000`、省略時はこの値)
 - DISCORD_CLIENT_ID: Discord OAuth2 のクライアント ID
 - DISCORD_CLIENT_SECRET: Discord OAuth2 のクライアントシークレット
-- DISCORD_REDIRECT_URI: OAuth2 コールバック URL (例: `http://localhost:3000/oauth/callback`)
-- SESSION_SECRET: セッション署名用のシークレット文字列 (ランダムな長い文字列推奨)
+- DISCORD_REDIRECT_URI: OAuth2 コールバック URL (例: `http://localhost:3000/api/auth/callback`)
+- JWT_SECRET: JWT 署名用のシークレット文字列 (ランダムな長い文字列推奨)
 
 ## 起動方法(ローカル)
 
 - `.env` などで上記環境変数を設定
-- `cargo run` で Bot と Web の両方が起動します
-- ブラウザで `http://localhost:3000` にアクセス
+- `go run cmd/nkmzbot/main.go` で Bot と API サーバーの両方が起動します
+- API は `http://localhost:3000/api` でアクセス可能
 
-## Web UI 機能
+## API エンドポイント
 
-- Discord OAuth でログイン
-- ログイン後、あなたが参加していて、かつ DB に登録済み(= commands テーブルにレコードがある)のギルド一覧を表示
-- ギルドを選択すると、コマンド一覧の検索/追加/更新/一括削除が可能
+### 認証
+- `GET /api/auth/login` - OAuth2 ログイン URL を取得
+- `GET /api/auth/callback` - OAuth2 コールバック (JWT トークンを返す)
+- `POST /api/auth/logout` - ログアウト
+
+### ギルド管理
+- `GET /api/user/guilds` - ユーザーが参加しているギルド一覧を取得 (認証必要)
+
+### コマンド管理
+- `GET /api/guilds/{guild_id}/commands` - コマンド一覧を取得 (認証必要)
+  - クエリパラメータ: `q` (検索キーワード)
+- `POST /api/guilds/{guild_id}/commands` - コマンドを追加 (認証必要)
+  - Body: `{"name": "command_name", "response": "response_text"}`
+- `PUT /api/guilds/{guild_id}/commands/{name}` - コマンドを更新 (認証必要)
+  - Body: `{"response": "new_response_text"}`
+- `DELETE /api/guilds/{guild_id}/commands/{name}` - コマンドを削除 (認証必要)
+- `POST /api/guilds/{guild_id}/commands/bulk-delete` - 複数コマンドを削除 (認証必要)
+  - Body: `{"names": ["command1", "command2"]}`
 
 ## Docker
 
@@ -35,9 +50,14 @@ DISCORD_TOKEN=... \
 DATABASE_URL=postgres://... \
 DISCORD_CLIENT_ID=... \
 DISCORD_CLIENT_SECRET=... \
-DISCORD_REDIRECT_URI=http://localhost:3000/oauth/callback \
-SESSION_SECRET=$(openssl rand -hex 32) \
-cargo run
+DISCORD_REDIRECT_URI=http://localhost:3000/api/auth/callback \
+JWT_SECRET=$(openssl rand -hex 32) \
+go run cmd/nkmzbot/main.go
 ```
 
-> 注意: 現状は Cookie ベースの簡易セッションです。必要に応じてサーバサイドセッションに置き換えてください。
+## ビルド
+
+```bash
+go build -o nkmzbot cmd/nkmzbot/main.go
+./nkmzbot
+```

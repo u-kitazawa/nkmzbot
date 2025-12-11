@@ -1,19 +1,40 @@
+# Rust artifacts
 target/
+
+# Go artifacts
+nkmzbot
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Environment files
 .env
 .env.*
-#Dockerfile*
-#docker-compose.yml*
+
+# Logs
 *.log
+
+# Editor files
 node_modules/
 .vscode/
 .DS_Store
 *.swp
 *.swo
+
+# Python artifacts
 __pycache__/
 *.pyc
+
+# Database files
 *.sqlite3
 *.db
+
+# Temporary files
 *.bak
 *.tmp
-.env
 tmp/
