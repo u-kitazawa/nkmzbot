@@ -1,24 +1,30 @@
-# Rust公式slimイメージを使用
-FROM rust:slim
+# Build stage
+FROM golang:1.21-alpine AS builder
 
-# 作業ディレクトリを作成
 WORKDIR /app
 
-# ソースコードをコピー
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
 COPY . .
 
-# 必要なシステム依存関係をインストール（pkg-config と OpenSSL の開発ヘッダ）
-# Debian/Ubuntu 系の slim イメージを想定しているため apt を使う
-RUN apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-	   pkg-config \
-	   libssl-dev \
-	   build-essential \
-	   ca-certificates \
-	&& rm -rf /var/lib/apt/lists/*
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o nkmzbot cmd/nkmzbot/main.go
 
-# 依存関係をビルド
-RUN cargo build --release
+# Runtime stage
+FROM alpine:latest
 
-# 実行ファイルを起動
-CMD ["./target/release/nkmzbot"]
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /app/nkmzbot .
+
+# Copy migrations
+COPY migrations ./migrations
+
+# Run the application
+CMD ["./nkmzbot"]
