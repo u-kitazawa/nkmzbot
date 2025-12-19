@@ -1,25 +1,20 @@
 {
-  "name": "nkmzbot (Rust + Postgres)",
+  "name": "nkmzbot (Go + Postgres)",
   "dockerComposeFile": ["./docker-compose.yml"],
   "service": "app",
   "workspaceFolder": "/workspaces/nkmzbot",
   "remoteUser": "root",
   "overrideCommand": true,
   "containerEnv": {
-    "CARGO_HOME": "/workspaces/.cargo",
-    "RUSTUP_HOME": "/workspaces/.rustup",
-    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workspaces/.cargo/bin"
+    "GOPROXY": "https://proxy.golang.org,direct"
   },
   "mounts": [
-    "source=devcontainer-cargo-cache,target=/workspaces/.cargo,type=volume",
-    "source=devcontainer-rustup-cache,target=/workspaces/.rustup,type=volume"
+    "source=go-mod-cache,target=/go/pkg/mod,type=volume"
   ],
   "customizations": {
     "vscode": {
       "extensions": [
-        "rust-lang.rust-analyzer",
-        "serayuzgur.crates",
-        "tamasfe.even-better-toml",
+        "golang.go",
         "usernamehw.errorlens"
       ]
     }
@@ -29,5 +24,5 @@
     "3000": { "label": "Web UI" },
     "5432": { "label": "Postgres" }
   },
-  "postCreateCommand": "rustup component add clippy && cargo fetch"
+  "postCreateCommand": "go mod download"
 }

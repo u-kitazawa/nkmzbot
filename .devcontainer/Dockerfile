@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/rust:1
+FROM mcr.microsoft.com/devcontainers/go:1
 
 # 必要に応じて追加のツールをインストール
 RUN apt-get update && \
