@@ -2,7 +2,7 @@
 target/
 
 # Go artifacts
-nkmzbot
+/nkmzbot
 *.exe
 *.exe~
 *.dll
