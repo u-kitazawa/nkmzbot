@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -25,6 +27,9 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	// Load environment variables from .env if present (non-fatal if missing)
+	_ = godotenv.Load()
+
 	cfg := &Config{
 		DiscordToken:        os.Getenv("DISCORD_TOKEN"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
