@@ -7,8 +7,7 @@ services:
     stdin_open: true
     volumes:
       - ..:/workspaces/nkmzbot:cached
-      - cargo-cache:/usr/local/cargo/registry
-      - target-cache:/workspaces/nkmzbot/target
+      - go-mod-cache:/go/pkg/mod
     environment:
       # devcontainer 内でアクセスできるように上書き
       - WEB_BIND=0.0.0.0:3000
@@ -30,6 +29,5 @@ services:
       - "5432:5432"
 
 volumes:
-  cargo-cache:
-  target-cache:
+  go-mod-cache:
   pgdata:
