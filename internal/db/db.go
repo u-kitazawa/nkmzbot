@@ -3,6 +3,10 @@ package db
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -31,16 +35,51 @@ func (db *DB) Close() {
 
 // RunMigrations runs database migrations
 func (db *DB) RunMigrations(ctx context.Context) error {
-	// Simple migration for the commands table
-	_, err := db.pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS commands (
-			guild_id BIGINT NOT NULL,
-			name TEXT NOT NULL,
-			response TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (guild_id, name)
-		);
-		CREATE INDEX IF NOT EXISTS idx_commands_guild_id ON commands(guild_id);
-	`)
-	return err
+	// Load and execute all .sql files under ./migrations in lexical order
+	migrationsDir := "./migrations"
+
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read migrations dir: %w", err)
+	}
+
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".sql") {
+			files = append(files, filepath.Join(migrationsDir, name))
+		}
+	}
+
+	sort.Strings(files)
+
+	for _, file := range files {
+		contentBytes, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration %s: %w", file, err)
+		}
+
+		sqlText := strings.TrimSpace(string(contentBytes))
+		if sqlText == "" {
+			continue
+		}
+
+		tx, err := db.pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to begin tx for %s: %w", file, err)
+		}
+		if _, execErr := tx.Exec(ctx, sqlText); execErr != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("failed to execute migration %s: %w", file, execErr)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("failed to commit migration %s: %w", file, err)
+		}
+	}
+
+	return nil
 }
