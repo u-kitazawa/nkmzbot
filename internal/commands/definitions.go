@@ -99,9 +99,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Description: "参加者の比率を設定",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
-							Type:        discordgo.ApplicationCommandOptionUser,
-							Name:        "user",
-							Description: "対象ユーザー",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "users",
+							Description: "対象ユーザー（メンション/IDをスペース区切り。単一も可）",
 							Required:    true,
 						},
 						{

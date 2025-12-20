@@ -2,6 +2,8 @@ package commands
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
@@ -44,18 +46,41 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         }
         respondText(s, i, fmt.Sprintf("<@%s> を参加者に追加しました", uid))
     case "weight":
-        uid := getUserID(data, sub, "user")
+        usersOpt := getStringOption(sub.Options, "users")
         val := getNumberOption(sub.Options, "value")
-        if uid == "" || val == nil {
-            respondText(s, i, "ユーザーと比率の指定が必要です")
+        if usersOpt == nil || val == nil {
+            respondText(s, i, "users と value の指定が必要です")
             return
         }
-        err := svc.SetWeight(channelID, uid, *val)
-        if err != nil {
-            respondText(s, i, "セッションが開始されていません")
+        ids := parseMentionIDs(*usersOpt)
+        if len(ids) == 0 {
+            respondText(s, i, "ユーザーのメンション/IDを認識できませんでした")
             return
         }
-        respondText(s, i, fmt.Sprintf("<@%s> の比率を %.2f に設定しました", uid, *val))
+        for _, id := range ids {
+            _ = svc.SetWeight(channelID, id, *val)
+        }
+        if len(ids) == 1 {
+            respondText(s, i, fmt.Sprintf("<@%s> の比率を %.2f に設定しました", ids[0], *val))
+        } else {
+            respondText(s, i, fmt.Sprintf("%d 名の比率を %.2f に設定しました", len(ids), *val))
+        }
+    case "weight_bulk":
+        usersOpt := getStringOption(sub.Options, "users")
+        val := getNumberOption(sub.Options, "value")
+        if usersOpt == nil || val == nil {
+            respondText(s, i, "users と value の指定が必要です")
+            return
+        }
+        ids := parseMentionIDs(*usersOpt)
+        if len(ids) == 0 {
+            respondText(s, i, "ユーザーのメンションを認識できませんでした")
+            return
+        }
+        for _, id := range ids {
+            _ = svc.SetWeight(channelID, id, *val)
+        }
+        respondText(s, i, fmt.Sprintf("%d 名の比率を %.2f に設定しました", len(ids), *val))
     case "pay":
         amtOpt := getIntOption(sub.Options, "amount")
         memoOpt := getStringOption(sub.Options, "memo")
@@ -178,3 +203,47 @@ func getStringOption(opts []*discordgo.ApplicationCommandInteractionDataOption, 
 }
 
 // no session needed for reading raw ID from options
+
+func parseMentionIDs(text string) []string {
+    // Supports <@123>, <@!123>, and raw IDs separated by spaces
+    re := regexp.MustCompile(`<@!?([0-9]+)>`)
+    var ids []string
+    for _, m := range re.FindAllStringSubmatch(text, -1) {
+        if len(m) >= 2 {
+            ids = append(ids, m[1])
+        }
+    }
+    // also allow raw IDs separated by spaces
+    for _, tok := range strings.Fields(text) {
+        if tok == "" {
+            continue
+        }
+        // if it's pure digits, treat as ID
+        if allDigits(tok) {
+            ids = append(ids, tok)
+        }
+    }
+    return unique(ids)
+}
+
+func allDigits(s string) bool {
+    for i := 0; i < len(s); i++ {
+        if s[i] < '0' || s[i] > '9' {
+            return false
+        }
+    }
+    return len(s) > 0
+}
+
+func unique(ids []string) []string {
+    seen := make(map[string]struct{}, len(ids))
+    out := make([]string, 0, len(ids))
+    for _, id := range ids {
+        if _, ok := seen[id]; ok {
+            continue
+        }
+        seen[id] = struct{}{}
+        out = append(out, id)
+    }
+    return out
+}
