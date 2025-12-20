@@ -79,6 +79,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleUpdate(s, i, b.db)
 	case "list":
 		commands.HandleList(s, i, b.db)
+	case "nomikai":
+		commands.HandleNomikai(s, i, b.nomikai)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
 	}

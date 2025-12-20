@@ -6,11 +6,13 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/nomikai"
 )
 
 type Bot struct {
 	session *discordgo.Session
 	db      *db.DB
+	nomikai *nomikai.Service
 }
 
 func New(token string, database *db.DB) (*Bot, error) {
@@ -22,6 +24,7 @@ func New(token string, database *db.DB) (*Bot, error) {
 	bot := &Bot{
 		session: session,
 		db:      database,
+		nomikai: nomikai.NewService(),
 	}
 
 	// Register event handlers
