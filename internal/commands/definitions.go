@@ -61,6 +61,102 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			DMPermission:   boolPtr(false),
 		},
 		{
+			Name:         "nomikai",
+			Description:  "飲み会割り勘セッションを操作します",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "start",
+					Description: "このチャンネルでセッションを開始",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "stop",
+					Description: "このチャンネルのセッションを終了",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "join",
+					Description: "自分を参加者に追加",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "member",
+					Description: "指定ユーザーを参加者に追加",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "追加するユーザー",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "weight",
+					Description: "参加者の比率を設定",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "対象ユーザー",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionNumber,
+							Name:        "value",
+							Description: "比率 (例: 1.5)",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "pay",
+					Description: "自分の立替額を記録（負額も可）",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "amount",
+							Description: "金額（円）",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "memo",
+							Description: "メモ",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "settle",
+					Description: "ネット精算を計算",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "status",
+					Description: "現在の状況を表示",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "done",
+					Description: "支払タスクを完了",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "相手",
+							Required:    true,
+						},
+					},
+				},
+			},
+		},
+		{
 			Name: "Register as Response",
 			Type: discordgo.MessageApplicationCommand,
 		},
