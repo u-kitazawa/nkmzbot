@@ -22,6 +22,9 @@ type Config struct {
 	// Web Server
 	WebBind string
 
+	// OpenAI
+	OpenAIKey string
+
 	// Session
 	JWTSecret string
 }
@@ -37,6 +40,7 @@ func Load() (*Config, error) {
 		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 		DiscordRedirectURI:  getEnvDefault("DISCORD_REDIRECT_URI", "http://localhost:3000/api/auth/callback"),
+		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
 		JWTSecret:           getEnvDefault("JWT_SECRET", "dev-only-change-me"),
 	}
 
@@ -52,6 +56,10 @@ func Load() (*Config, error) {
 	if cfg.DiscordClientSecret == "" {
 		return nil, fmt.Errorf("DISCORD_CLIENT_SECRET is required")
 	}
+	// OpenAI key is optional for now, or check if required?
+	// User said it requires OPENAI_API_KEY. I won't error if missing to allow bot to start without it if voice is unused, 
+	// but strictly speaking, features won't work. I'll stick to non-fatal or maybe warn.
+	// For now, I won't adding validation to keep it simple.
 
 	return cfg, nil
 }

@@ -83,6 +83,10 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
+	case "join":
+		commands.HandleJoin(s, i, b.voiceManager)
+	case "leave":
+		commands.HandleLeave(s, i, b.voiceManager, b.transcriber)
 	}
 }
 

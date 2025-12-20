@@ -5,26 +5,33 @@ import (
 	"log"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/susu3304/nkmzbot/internal/config"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
+	"github.com/susu3304/nkmzbot/internal/transcribe"
+	"github.com/susu3304/nkmzbot/internal/voice"
 )
 
 type Bot struct {
-	session *discordgo.Session
-	db      *db.DB
-	nomikai *nomikai.Service
+	session      *discordgo.Session
+	db           *db.DB
+	nomikai      *nomikai.Service
+	voiceManager *voice.Manager
+	transcriber  *transcribe.Client
 }
 
-func New(token string, database *db.DB) (*Bot, error) {
-	session, err := discordgo.New("Bot " + token)
+func New(cfg *config.Config, database *db.DB) (*Bot, error) {
+	session, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
 	}
 
 	bot := &Bot{
-		session: session,
-		db:      database,
-		nomikai: nomikai.NewService(),
+		session:      session,
+		db:           database,
+		nomikai:      nomikai.NewService(),
+		voiceManager: voice.NewManager(),
+		transcriber:  transcribe.NewClient(cfg.OpenAIKey),
 	}
 
 	// Register event handlers

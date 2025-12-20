@@ -165,6 +165,14 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			Name: "Register as Response",
 			Type: discordgo.MessageApplicationCommand,
 		},
+		{
+			Name:        "join",
+			Description: "Join your voice channel and start recording",
+		},
+		{
+			Name:        "leave",
+			Description: "Leave the voice channel and stop recording",
+		},
 	}
 }
 
