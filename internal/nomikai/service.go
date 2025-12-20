@@ -59,43 +59,58 @@ func (s *Service) Join(channelID, userID string) error {
     return nil
 }
 
-func (s *Service) SetWeight(channelID, userID string, w float64) error {
+func (s *Service) SetWeight(channelID, userID string, w float64) (bool, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
     sess, ok := s.store[channelID]
     if !ok || !sess.Active {
-        return errors.New("セッションが開始されていません")
+        return false, errors.New("セッションが開始されていません")
     }
     p, exists := sess.Participants[userID]
     if !exists {
         p = &Participant{UserID: userID, Weight: 1.0}
         sess.Participants[userID] = p
+        // Newly joined
+        joined := true
+        if w <= 0 {
+            w = 0
+        }
+        p.Weight = w
+        return joined, nil
     }
     if w <= 0 {
         w = 0
     }
     p.Weight = w
-    return nil
+    return false, nil
 }
 
-func (s *Service) AddPayment(channelID, userID string, amount int64, memo string) error {
+func (s *Service) AddPayment(channelID, userID string, amount int64, memo string) (bool, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
     sess, ok := s.store[channelID]
     if !ok || !sess.Active {
-        return errors.New("セッションが開始されていません")
+        return false, errors.New("セッションが開始されていません")
     }
     p, exists := sess.Participants[userID]
     if !exists {
         p = &Participant{UserID: userID, Weight: 1.0}
         sess.Participants[userID] = p
+        // Newly joined
+        joined := true
+        if p.PaidSum+amount < 0 {
+            return false, errors.New("訂正額により合計が負になります")
+        }
+        p.PaidSum += amount
+        sess.Payments = append(sess.Payments, Payment{PayerID: userID, Amount: amount, Memo: memo})
+        return joined, nil
     }
     if p.PaidSum+amount < 0 {
-        return errors.New("訂正額により合計が負になります")
+        return false, errors.New("訂正額により合計が負になります")
     }
     p.PaidSum += amount
     sess.Payments = append(sess.Payments, Payment{PayerID: userID, Amount: amount, Memo: memo})
-    return nil
+    return false, nil
 }
 
 func (s *Service) Status(channelID string) (string, error) {

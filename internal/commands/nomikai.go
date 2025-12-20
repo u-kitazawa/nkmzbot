@@ -57,30 +57,30 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
             respondText(s, i, "ユーザーのメンション/IDを認識できませんでした")
             return
         }
+        var joinedIDs []string
         for _, id := range ids {
-            _ = svc.SetWeight(channelID, id, *val)
+            joined, _ := svc.SetWeight(channelID, id, *val)
+            if joined {
+                joinedIDs = append(joinedIDs, id)
+            }
         }
         if len(ids) == 1 {
-            respondText(s, i, fmt.Sprintf("<@%s> の比率を %.2f に設定しました", ids[0], *val))
+            msg := fmt.Sprintf("<@%s> の比率を %.2f に設定しました", ids[0], *val)
+            if len(joinedIDs) == 1 {
+                msg += "\nこのユーザーを参加登録しました"
+            }
+            respondText(s, i, msg)
         } else {
-            respondText(s, i, fmt.Sprintf("%d 名の比率を %.2f に設定しました", len(ids), *val))
+            msg := fmt.Sprintf("%d 名の比率を %.2f に設定しました", len(ids), *val)
+            if len(joinedIDs) > 0 {
+                msg += "\n参加登録: "
+                for idx, id := range joinedIDs {
+                    if idx > 0 { msg += ", " }
+                    msg += fmt.Sprintf("<@%s>", id)
+                }
+            }
+            respondText(s, i, msg)
         }
-    case "weight_bulk":
-        usersOpt := getStringOption(sub.Options, "users")
-        val := getNumberOption(sub.Options, "value")
-        if usersOpt == nil || val == nil {
-            respondText(s, i, "users と value の指定が必要です")
-            return
-        }
-        ids := parseMentionIDs(*usersOpt)
-        if len(ids) == 0 {
-            respondText(s, i, "ユーザーのメンションを認識できませんでした")
-            return
-        }
-        for _, id := range ids {
-            _ = svc.SetWeight(channelID, id, *val)
-        }
-        respondText(s, i, fmt.Sprintf("%d 名の比率を %.2f に設定しました", len(ids), *val))
     case "pay":
         amtOpt := getIntOption(sub.Options, "amount")
         memoOpt := getStringOption(sub.Options, "memo")
@@ -92,12 +92,16 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         if memoOpt != nil {
             memo = *memoOpt
         }
-        err := svc.AddPayment(channelID, userID, *amtOpt, memo)
+        joined, err := svc.AddPayment(channelID, userID, *amtOpt, memo)
         if err != nil {
             respondText(s, i, err.Error())
             return
         }
-        respondText(s, i, fmt.Sprintf("%d 円を記録しました", *amtOpt))
+        msg := fmt.Sprintf("%d 円を記録しました", *amtOpt)
+        if joined {
+            msg += "\nこのユーザーを参加登録しました"
+        }
+        respondText(s, i, msg)
     case "settle":
         res, err := svc.Settle(channelID)
         if err != nil {
