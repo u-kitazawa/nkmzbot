@@ -1,12 +1,12 @@
 package nomikai
 
 import (
-    "errors"
-    "fmt"
-    "math"
-    "sort"
-    "strings"
-    "sync"
+	"errors"
+	"fmt"
+	"math"
+	"sort"
+	"strings"
+	"sync"
 )
 
 type Service struct {
@@ -124,6 +124,22 @@ func (s *Service) Status(channelID string) (string, error) {
         fmt.Fprintf(&b, "<@%s> weight=%.2f paid=%d\n", r.uid, r.w, r.paid)
     }
     return b.String(), nil
+}
+
+// Members returns the list of participant user IDs for the channel session.
+func (s *Service) Members(channelID string) ([]string, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    sess, ok := s.store[channelID]
+    if !ok || !sess.Active {
+        return nil, errors.New("セッションが開始されていません")
+    }
+    ids := make([]string, 0, len(sess.Participants))
+    for uid := range sess.Participants {
+        ids = append(ids, uid)
+    }
+    sort.Strings(ids)
+    return ids, nil
 }
 
 func (s *Service) Settle(channelID string) (*SettleResult, error) {

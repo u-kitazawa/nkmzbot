@@ -143,6 +143,11 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "memberlist",
+					Description: "参加中のメンバーを表示",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "done",
 					Description: "支払タスクを完了",
 					Options: []*discordgo.ApplicationCommandOption{

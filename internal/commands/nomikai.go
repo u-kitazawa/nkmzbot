@@ -116,6 +116,22 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
             return
         }
         respondText(s, i, txt)
+    case "memberlist":
+        ids, err := svc.Members(channelID)
+        if err != nil {
+            respondText(s, i, err.Error())
+            return
+        }
+        if len(ids) == 0 {
+            respondText(s, i, "参加者がいません")
+            return
+        }
+        var b strings.Builder
+        fmt.Fprintf(&b, "参加者 (%d名):\n", len(ids))
+        for _, id := range ids {
+            fmt.Fprintf(&b, "・<@%s>\n", id)
+        }
+        respondText(s, i, b.String())
     case "done":
         uid := getUserID(data, sub, "user")
         if uid == "" {
