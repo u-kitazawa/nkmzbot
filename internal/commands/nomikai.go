@@ -34,17 +34,33 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         err := svc.Join(channelID, userID)
         respondSimple(s, i, err, "参加者として登録しました", "セッションが開始されていません")
     case "member":
-        uid := getUserID(data, sub, "user")
-        if uid == "" {
-            respondText(s, i, "ユーザーが指定されていません")
+        usersOpt := getStringOption(sub.Options, "users")
+        if usersOpt == nil {
+            respondText(s, i, "users の指定が必要です")
             return
         }
-        err := svc.Join(channelID, uid)
-        if err != nil {
-            respondText(s, i, "セッションが開始されていません")
+        ids := parseMentionIDs(*usersOpt)
+        if len(ids) == 0 {
+            respondText(s, i, "ユーザーのメンション/IDを認識できませんでした")
             return
         }
-        respondText(s, i, fmt.Sprintf("<@%s> を参加者に追加しました", uid))
+        for _, id := range ids {
+            if err := svc.Join(channelID, id); err != nil {
+                respondText(s, i, "セッションが開始されていません")
+                return
+            }
+        }
+        if len(ids) == 1 {
+            respondText(s, i, fmt.Sprintf("<@%s> を参加者に追加しました", ids[0]))
+        } else {
+            var b strings.Builder
+            fmt.Fprintf(&b, "%d 名を参加者に追加しました\n追加: ", len(ids))
+            for idx, id := range ids {
+                if idx > 0 { b.WriteString(", ") }
+                fmt.Fprintf(&b, "<@%s>", id)
+            }
+            respondText(s, i, b.String())
+        }
     case "weight":
         usersOpt := getStringOption(sub.Options, "users")
         val := getNumberOption(sub.Options, "value")

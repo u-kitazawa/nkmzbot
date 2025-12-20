@@ -86,9 +86,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Description: "指定ユーザーを参加者に追加",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
-							Type:        discordgo.ApplicationCommandOptionUser,
-							Name:        "user",
-							Description: "追加するユーザー",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "users",
+							Description: "追加するユーザー（メンション/IDをスペース区切り。単一も可）",
 							Required:    true,
 						},
 					},
