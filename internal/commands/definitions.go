@@ -124,6 +124,12 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Required:    true,
 						},
 						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "payer",
+							Description: "支払者（未指定なら自分）",
+							Required:    false,
+						},
+						{
 							Type:        discordgo.ApplicationCommandOptionString,
 							Name:        "memo",
 							Description: "メモ",
