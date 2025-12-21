@@ -108,14 +108,19 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         if memoOpt != nil {
             memo = *memoOpt
         }
-        joined, err := svc.AddPayment(channelID, userID, *amtOpt, memo)
+        payerID := getUserID(data, sub, "payer")
+        payer := userID
+        if payerID != "" {
+            payer = payerID
+        }
+        joined, err := svc.AddPayment(channelID, payer, *amtOpt, memo)
         if err != nil {
             respondText(s, i, err.Error())
             return
         }
-        msg := fmt.Sprintf("%d 円を記録しました", *amtOpt)
+        msg := fmt.Sprintf("<@%s> の支払として %d 円を記録しました", payer, *amtOpt)
         if joined {
-            msg += "\nこのユーザーを参加登録しました"
+            msg += "\n参加登録: <@" + payer + ">"
         }
         respondText(s, i, msg)
     case "settle":
@@ -140,10 +145,6 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         ids, err := svc.Members(channelID)
         if err != nil {
             respondText(s, i, err.Error())
-            return
-        }
-        if len(ids) == 0 {
-            respondText(s, i, "参加者がいません")
             return
         }
         var b strings.Builder
