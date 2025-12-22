@@ -131,6 +131,12 @@ func GetCommands() []*discordgo.ApplicationCommand {
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "for",
+							Description: "対象ユーザー（メンション/ID。スペース区切りで複数可）",
+							Required:    false,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
 							Name:        "memo",
 							Description: "メモ",
 							Required:    false,

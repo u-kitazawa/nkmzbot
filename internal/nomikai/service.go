@@ -113,6 +113,46 @@ func (s *Service) AddPayment(channelID, userID string, amount int64, memo string
     return false, nil
 }
 
+// AddPaymentFor records a payment by payer for specific beneficiaries. If beneficiaries is empty, use AddPayment instead.
+// Returns: payerJoined, beneficiariesJoinedIDs, error
+func (s *Service) AddPaymentFor(channelID, payerID string, amount int64, memo string, beneficiaries []string) (bool, []string, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    sess, ok := s.store[channelID]
+    if !ok || !sess.Active {
+        return false, nil, errors.New("セッションが開始されていません")
+    }
+    // Ensure payer exists
+    p, exists := sess.Participants[payerID]
+    joined := false
+    if !exists {
+        p = &Participant{UserID: payerID, Weight: 1.0}
+        sess.Participants[payerID] = p
+        joined = true
+    }
+    if p.PaidSum+amount < 0 {
+        return false, nil, errors.New("訂正額により合計が負になります")
+    }
+    // Ensure beneficiaries exist as participants (auto-join)
+    // Also normalize: remove duplicates and empties
+    uniq := make(map[string]struct{}, len(beneficiaries))
+    var ben []string
+    var benJoined []string
+    for _, id := range beneficiaries {
+        if id == "" { continue }
+        if _, seen := uniq[id]; seen { continue }
+        uniq[id] = struct{}{}
+        if _, ok := sess.Participants[id]; !ok {
+            sess.Participants[id] = &Participant{UserID: id, Weight: 1.0}
+            benJoined = append(benJoined, id)
+        }
+        ben = append(ben, id)
+    }
+    p.PaidSum += amount
+    sess.Payments = append(sess.Payments, Payment{PayerID: payerID, Amount: amount, Memo: memo, Beneficiaries: ben})
+    return joined, benJoined, nil
+}
+
 func (s *Service) Status(channelID string) (string, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
@@ -167,20 +207,38 @@ func (s *Service) Settle(channelID string) (*SettleResult, error) {
     if len(sess.Participants) < 2 {
         return nil, errors.New("参加者が2人以上必要です")
     }
-    var total int64
-    var wsum float64
-    for _, p := range sess.Participants {
-        total += p.PaidSum
-        wsum += p.Weight
-    }
-    if wsum == 0 {
-        return &SettleResult{Tasks: nil, Summary: "全員の比率が0です"}, nil
-    }
+    // Compute charges per user based on payment-level beneficiaries
     type bal struct{ uid string; net float64 }
+    charges := make(map[string]float64, len(sess.Participants))
+    // Iterate payments and distribute cost among beneficiaries (or all participants if none)
+    for _, pay := range sess.Payments {
+        var targetIDs []string
+        if len(pay.Beneficiaries) > 0 {
+            targetIDs = pay.Beneficiaries
+        } else {
+            targetIDs = make([]string, 0, len(sess.Participants))
+            for uid := range sess.Participants { targetIDs = append(targetIDs, uid) }
+        }
+        // sum weights of targets
+        var wsum float64
+        for _, uid := range targetIDs {
+            if p, ok := sess.Participants[uid]; ok {
+                wsum += p.Weight
+            }
+        }
+        if wsum == 0 {
+            continue // cannot allocate
+        }
+        for _, uid := range targetIDs {
+            if p, ok := sess.Participants[uid]; ok {
+                share := float64(pay.Amount) * (p.Weight / wsum)
+                charges[uid] += share
+            }
+        }
+    }
     var pos, neg []bal
     for uid, p := range sess.Participants {
-        ci := float64(total) * (p.Weight / wsum)
-        net := float64(p.PaidSum) - ci
+        net := float64(p.PaidSum) - charges[uid]
         if net > 0 {
             pos = append(pos, bal{uid: uid, net: net})
         } else if net < 0 {
