@@ -18,6 +18,7 @@ type Payment struct {
     PayerID string
     Amount  int64
     Memo    string
+    Beneficiaries []string // 空なら全参加者対象
 }
 
 type SettlementTask struct {

@@ -100,6 +100,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
     case "pay":
         amtOpt := getIntOption(sub.Options, "amount")
         memoOpt := getStringOption(sub.Options, "memo")
+        forOpt := getStringOption(sub.Options, "for")
         if amtOpt == nil {
             respondText(s, i, "金額の指定が必要です")
             return
@@ -113,14 +114,40 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         if payerID != "" {
             payer = payerID
         }
-        joined, err := svc.AddPayment(channelID, payer, *amtOpt, memo)
+        var beneficiaries []string
+        if forOpt != nil {
+            beneficiaries = parseMentionIDs(*forOpt)
+        }
+        var joined bool
+        var benJoined []string
+        var err error
+        if len(beneficiaries) > 0 {
+            joined, benJoined, err = svc.AddPaymentFor(channelID, payer, *amtOpt, memo, beneficiaries)
+        } else {
+            joined, err = svc.AddPayment(channelID, payer, *amtOpt, memo)
+        }
         if err != nil {
             respondText(s, i, err.Error())
             return
         }
         msg := fmt.Sprintf("<@%s> の支払として %d 円を記録しました", payer, *amtOpt)
-        if joined {
-            msg += "\n参加登録: <@" + payer + ">"
+        if len(beneficiaries) > 0 {
+            msg += "\n対象: "
+            for idx, id := range beneficiaries {
+                if idx > 0 { msg += ", " }
+                msg += fmt.Sprintf("<@%s>", id)
+            }
+        }
+        // Compose join notifications (payer and newly joined beneficiaries)
+        var joinIDs []string
+        if joined { joinIDs = append(joinIDs, payer) }
+        if len(benJoined) > 0 { joinIDs = append(joinIDs, benJoined...) }
+        if len(joinIDs) > 0 {
+            msg += "\n参加登録: "
+            for idx, id := range joinIDs {
+                if idx > 0 { msg += ", " }
+                msg += fmt.Sprintf("<@%s>", id)
+            }
         }
         respondText(s, i, msg)
     case "settle":
