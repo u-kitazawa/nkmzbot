@@ -12,7 +12,7 @@ import (
 
 func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
-	
+
 	// Get the message from the interaction
 	if data.Resolved == nil || len(data.Resolved.Messages) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

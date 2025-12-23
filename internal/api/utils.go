@@ -12,7 +12,7 @@ func generateRandomString(length int) string {
 	if byteLength < length {
 		byteLength = length
 	}
-	
+
 	b := make([]byte, byteLength)
 	rand.Read(b)
 	encoded := base64.URLEncoding.EncodeToString(b)

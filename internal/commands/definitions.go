@@ -5,9 +5,9 @@ import "github.com/bwmarrin/discordgo"
 func GetCommands() []*discordgo.ApplicationCommand {
 	return []*discordgo.ApplicationCommand{
 		{
-			Name:           "add",
-			Description:    "新しいコマンドを追加します",
-			DMPermission:   boolPtr(false),
+			Name:         "add",
+			Description:  "新しいコマンドを追加します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -24,9 +24,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "remove",
-			Description:    "コマンドを削除します",
-			DMPermission:   boolPtr(false),
+			Name:         "remove",
+			Description:  "コマンドを削除します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -37,9 +37,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "update",
-			Description:    "コマンドを更新します",
-			DMPermission:   boolPtr(false),
+			Name:         "update",
+			Description:  "コマンドを更新します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -56,9 +56,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "list",
-			Description:    "登録されているコマンド一覧を表示します",
-			DMPermission:   boolPtr(false),
+			Name:         "list",
+			Description:  "登録されているコマンド一覧を表示します",
+			DMPermission: boolPtr(false),
 		},
 		{
 			Name:         "nomikai",

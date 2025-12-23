@@ -21,6 +21,11 @@ func New(token string, database *db.DB) (*Bot, error) {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
 	}
 
+	// Enable state tracking to maintain session across reconnects
+	session.StateEnabled = true
+	// Enable automatic reconnection on errors
+	session.ShouldReconnectOnError = true
+
 	bot := &Bot{
 		session: session,
 		db:      database,
