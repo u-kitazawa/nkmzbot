@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type NomikaiEvent struct {
@@ -160,13 +161,16 @@ func (db *DB) PaymentBeneficiaries(ctx context.Context, paymentID int64) ([]stri
 	return out, rows.Err()
 }
 
-// UpsertReminder configures reminders for an event.
-func (db *DB) UpsertReminder(ctx context.Context, eventID int64, enabled bool, intervalMinutes int) error {
+// UpsertReminder configures reminders for an event and optionally schedules the next due time.
+func (db *DB) UpsertReminder(ctx context.Context, eventID int64, enabled bool, intervalMinutes int, nextDueAt *time.Time) error {
 	_, err := db.pool.Exec(ctx,
-		`INSERT INTO nomikai_reminders (event_id, enabled, interval_minutes)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (event_id) DO UPDATE SET enabled = EXCLUDED.enabled, interval_minutes = EXCLUDED.interval_minutes`,
-		eventID, enabled, intervalMinutes,
+		`INSERT INTO nomikai_reminders (event_id, enabled, interval_minutes, next_due_at)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (event_id) DO UPDATE
+		 SET enabled = EXCLUDED.enabled,
+			 interval_minutes = EXCLUDED.interval_minutes,
+			 next_due_at = COALESCE(EXCLUDED.next_due_at, nomikai_reminders.next_due_at)`,
+		eventID, enabled, intervalMinutes, nextDueAt,
 	)
 	return err
 }
@@ -200,6 +204,12 @@ type SettlementTaskRow struct {
 	PayerID string
 	PayeeID string
 	Amount  int64
+}
+
+type ReminderDue struct {
+	EventID         int64
+	ChannelID       string
+	IntervalMinutes int
 }
 
 // SetSettlementTasks replaces tasks for an event.
@@ -242,4 +252,162 @@ func (db *DB) CompleteTaskPair(ctx context.Context, eventID int64, actorID, othe
 		return false, err
 	}
 	return ct.RowsAffected() > 0, nil
+}
+
+// ListPendingSettlementTasks returns unsettled tasks for an event.
+func (db *DB) ListPendingSettlementTasks(ctx context.Context, eventID int64) ([]SettlementTaskRow, error) {
+	rows, err := db.pool.Query(ctx,
+		`SELECT payer_id, payee_id, amount
+		 FROM nomikai_settlement_tasks
+		 WHERE event_id = $1 AND completed = FALSE
+		 ORDER BY payer_id, payee_id`,
+		eventID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []SettlementTaskRow
+	for rows.Next() {
+		var t SettlementTaskRow
+		if err := rows.Scan(&t.PayerID, &t.PayeeID, &t.Amount); err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
+}
+
+// DueReminders returns reminder targets that are due and still have pending tasks.
+func (db *DB) DueReminders(ctx context.Context, now time.Time) ([]ReminderDue, error) {
+	rows, err := db.pool.Query(ctx,
+		`SELECT r.event_id, e.channel_id, r.interval_minutes
+		 FROM nomikai_reminders r
+		 JOIN nomikai_events e ON e.id = r.event_id
+		 WHERE r.enabled = TRUE
+		   AND (r.next_due_at IS NULL OR r.next_due_at <= $1)
+		   AND EXISTS (
+			 SELECT 1 FROM nomikai_settlement_tasks t
+			 WHERE t.event_id = r.event_id AND t.completed = FALSE
+		   )`,
+		now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var targets []ReminderDue
+	for rows.Next() {
+		var r ReminderDue
+		if err := rows.Scan(&r.EventID, &r.ChannelID, &r.IntervalMinutes); err != nil {
+			return nil, err
+		}
+		targets = append(targets, r)
+	}
+	return targets, rows.Err()
+}
+
+// MarkReminderSent updates reminder schedule timestamps.
+func (db *DB) MarkReminderSent(ctx context.Context, eventID int64, sentAt time.Time, nextDue time.Time) error {
+	_, err := db.pool.Exec(ctx,
+		`UPDATE nomikai_reminders
+		 SET last_sent_at = $2, next_due_at = $3
+		 WHERE event_id = $1`,
+		eventID, sentAt, nextDue,
+	)
+	return err
+}
+
+// RecordSettlementPayment logs a settlement payment and reduces outstanding tasks (payer -> payee).
+// Returns the remaining unsettled amount for the pair after applying the payment.
+func (db *DB) RecordSettlementPayment(ctx context.Context, eventID int64, payerID, payeeID string, amount int64, memo, recordedBy string) (int64, error) {
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+
+	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	type pending struct {
+		ID     int64
+		Amount int64
+	}
+
+	rows, err := tx.Query(ctx,
+		`SELECT id, amount
+		 FROM nomikai_settlement_tasks
+		 WHERE event_id = $1 AND completed = FALSE AND payer_id = $2 AND payee_id = $3
+		 ORDER BY id FOR UPDATE`,
+		eventID, payerID, payeeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	var tasks []pending
+	for rows.Next() {
+		var p pending
+		if err := rows.Scan(&p.ID, &p.Amount); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		tasks = append(tasks, p)
+	}
+	rows.Close()
+
+	remainingPayment := amount
+	for _, t := range tasks {
+		if remainingPayment <= 0 {
+			break
+		}
+		switch {
+		case remainingPayment >= t.Amount:
+			remainingPayment -= t.Amount
+			if _, err := tx.Exec(ctx,
+				`UPDATE nomikai_settlement_tasks
+				 SET completed = TRUE, completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+				 WHERE id = $1`,
+				t.ID,
+			); err != nil {
+				return 0, err
+			}
+		default:
+			newAmount := t.Amount - remainingPayment
+			remainingPayment = 0
+			if _, err := tx.Exec(ctx,
+				`UPDATE nomikai_settlement_tasks SET amount = $2 WHERE id = $1`,
+				t.ID, newAmount,
+			); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO nomikai_task_payments (event_id, payer_id, payee_id, amount, memo, recorded_by)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		eventID, payerID, payeeID, amount, memo, recordedBy,
+	); err != nil {
+		return 0, err
+	}
+
+	var remaining int64
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(SUM(amount), 0)
+		 FROM nomikai_settlement_tasks
+		 WHERE event_id = $1 AND completed = FALSE AND payer_id = $2 AND payee_id = $3`,
+		eventID, payerID, payeeID,
+	).Scan(&remaining); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+
+	return remaining, nil
 }

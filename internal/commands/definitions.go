@@ -5,9 +5,9 @@ import "github.com/bwmarrin/discordgo"
 func GetCommands() []*discordgo.ApplicationCommand {
 	return []*discordgo.ApplicationCommand{
 		{
-			Name:           "add",
-			Description:    "新しいコマンドを追加します",
-			DMPermission:   boolPtr(false),
+			Name:         "add",
+			Description:  "新しいコマンドを追加します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -24,9 +24,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "remove",
-			Description:    "コマンドを削除します",
-			DMPermission:   boolPtr(false),
+			Name:         "remove",
+			Description:  "コマンドを削除します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -37,9 +37,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "update",
-			Description:    "コマンドを更新します",
-			DMPermission:   boolPtr(false),
+			Name:         "update",
+			Description:  "コマンドを更新します",
+			DMPermission: boolPtr(false),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -56,9 +56,9 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:           "list",
-			Description:    "登録されているコマンド一覧を表示します",
-			DMPermission:   boolPtr(false),
+			Name:         "list",
+			Description:  "登録されているコマンド一覧を表示します",
+			DMPermission: boolPtr(false),
 		},
 		{
 			Name:         "nomikai",
@@ -168,6 +168,56 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Name:        "user",
 							Description: "相手",
 							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "remind",
+					Description: "未払いタスクの定期リマインドを設定し即時送信",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "interval",
+							Description: "リマインド間隔 (例: 1d2h3m / デフォルト1d / 最小1m)",
+							Required:    false,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionBoolean,
+							Name:        "disable",
+							Description: "有効化ではなく停止する",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "paid",
+					Description: "実際の支払いを登録して未払いを減らす",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "to",
+							Description: "受け取り側",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "amount",
+							Description: "支払った金額 (円)",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "payer",
+							Description: "支払者 (未指定なら自分)",
+							Required:    false,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "memo",
+							Description: "メモ",
+							Required:    false,
 						},
 					},
 				},

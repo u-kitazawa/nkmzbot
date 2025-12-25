@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/susu3304/nkmzbot/internal/db"
 )
@@ -357,4 +358,123 @@ func (s *Service) CompleteTask(ctx context.Context, channelID, actorID, otherID 
 		return fmt.Sprintf("完了しました: <@%s> ↔ <@%s>", actorID, otherID), nil
 	}
 	return "対象のタスクが見つかりません", nil
+}
+
+// ConfigureReminder enables or disables periodic reminders and schedules the next run.
+func (s *Service) ConfigureReminder(ctx context.Context, channelID string, intervalMinutes int, disable bool, sendNow bool) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1440
+	}
+	if intervalMinutes < 1 {
+		intervalMinutes = 1
+	}
+
+	if disable {
+		if err := s.db.UpsertReminder(ctx, ev.ID, false, intervalMinutes, nil); err != nil {
+			return "リマインド設定の更新に失敗しました", err
+		}
+		return "リマインドを停止しました", nil
+	}
+
+	if sendNow {
+		msg, err := s.reminderMessage(ctx, ev.ID)
+		if err != nil {
+			return "リマインド本文の生成に失敗しました", err
+		}
+		// 未払いがない場合は「次回送信」を案内すると違和感があるので、
+		// next_due_at を NULL にして「未払いがある時だけ送信」モードにする。
+		if msg == "未払いのタスクはありません" {
+			if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, nil); err != nil {
+				return "リマインド設定の更新に失敗しました", err
+			}
+			return msg + "\nリマインドは有効です（未払いがあるときのみ自動送信します）", nil
+		}
+
+		next := time.Now().Add(time.Duration(intervalMinutes) * time.Minute)
+		if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, &next); err != nil {
+			return "リマインド設定の更新に失敗しました", err
+		}
+		return msg + fmt.Sprintf("\n次回は約 %d 分後に自動送信します", intervalMinutes), nil
+	}
+
+	next := time.Now().Add(time.Duration(intervalMinutes) * time.Minute)
+	if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, &next); err != nil {
+		return "リマインド設定の更新に失敗しました", err
+	}
+	return fmt.Sprintf("リマインドを有効化しました。次回は約 %d 分後に送信します", intervalMinutes), nil
+}
+
+// ReminderMessage creates the current unpaid summary for a channel's event.
+func (s *Service) ReminderMessage(ctx context.Context, channelID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+	return s.reminderMessage(ctx, ev.ID)
+}
+
+// ReminderMessageByEventID builds a reminder body for a known event.
+func (s *Service) ReminderMessageByEventID(ctx context.Context, eventID int64) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reminderMessage(ctx, eventID)
+}
+
+// RegisterPayment records a settlement payment between payer and payee and updates tasks.
+func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string) (string, error) {
+	if amount <= 0 {
+		return "金額は正の値で指定してください", nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+
+	remaining, err := s.db.RecordSettlementPayment(ctx, ev.ID, payerID, payeeID, amount, memo, actorID)
+	if err != nil {
+		return "支払いの登録に失敗しました", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "支払いを記録しました: <@%s> → <@%s> %d 円", payerID, payeeID, amount)
+	if memo != "" {
+		fmt.Fprintf(&b, " (%s)", memo)
+	}
+	if remaining > 0 {
+		fmt.Fprintf(&b, "\nこのペアの未払い残高: %d 円", remaining)
+	} else {
+		b.WriteString("\nこのペアの未払いタスクは解消されました")
+	}
+	return b.String(), nil
+}
+
+func (s *Service) reminderMessage(ctx context.Context, eventID int64) (string, error) {
+	tasks, err := s.db.ListPendingSettlementTasks(ctx, eventID)
+	if err != nil {
+		return "", err
+	}
+	if len(tasks) == 0 {
+		return "未払いのタスクはありません", nil
+	}
+
+	var b strings.Builder
+	b.WriteString("未払いのリマインドです。対応をお願いします。\n")
+	for _, t := range tasks {
+		fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
