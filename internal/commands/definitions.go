@@ -160,19 +160,6 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "done",
-					Description: "支払タスクを完了",
-					Options: []*discordgo.ApplicationCommandOption{
-						{
-							Type:        discordgo.ApplicationCommandOptionUser,
-							Name:        "user",
-							Description: "相手",
-							Required:    true,
-						},
-					},
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "remind",
 					Description: "未払いタスクの定期リマインドを設定し即時送信",
 					Options: []*discordgo.ApplicationCommandOption{

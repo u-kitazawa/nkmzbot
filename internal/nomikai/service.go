@@ -343,23 +343,6 @@ func (s *Service) Settle(ctx context.Context, channelID string) (*SettleResult, 
 	return &SettleResult{Tasks: tasks, Summary: b.String()}, nil
 }
 
-func (s *Service) CompleteTask(ctx context.Context, channelID, actorID, otherID string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
-	if err != nil {
-		return "セッションが開始されていません", nil
-	}
-	ok, err := s.db.CompleteTaskPair(ctx, ev.ID, actorID, otherID)
-	if err != nil {
-		return "エラーが発生しました", err
-	}
-	if ok {
-		return fmt.Sprintf("完了しました: <@%s> ↔ <@%s>", actorID, otherID), nil
-	}
-	return "対象のタスクが見つかりません", nil
-}
-
 // ConfigureReminder enables or disables periodic reminders and schedules the next run.
 func (s *Service) ConfigureReminder(ctx context.Context, channelID string, intervalMinutes int, disable bool, sendNow bool) (string, error) {
 	s.mu.Lock()

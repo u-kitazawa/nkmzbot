@@ -201,18 +201,6 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			fmt.Fprintf(&b, "・<@%s>\n", id)
 		}
 		respondText(s, i, b.String())
-	case "done":
-		uid := getUserID(data, sub, "user")
-		if uid == "" {
-			respondText(s, i, "相手の指定が必要です")
-			return
-		}
-		msg, err := svc.CompleteTask(context.Background(), channelID, userID, uid)
-		if err != nil {
-			respondText(s, i, err.Error())
-			return
-		}
-		respondText(s, i, msg)
 	case "remind":
 		intervalMinutes := 1440
 		if opt := getStringOption(sub.Options, "interval"); opt != nil {

@@ -238,22 +238,6 @@ func (db *DB) SetSettlementTasks(ctx context.Context, eventID int64, tasks []Set
 	return tx.Commit(ctx)
 }
 
-// CompleteTaskPair marks a task between two users as completed.
-func (db *DB) CompleteTaskPair(ctx context.Context, eventID int64, actorID, otherID string) (bool, error) {
-	ct, err := db.pool.Exec(ctx,
-		`UPDATE nomikai_settlement_tasks
-         SET completed = TRUE, completed_at = CURRENT_TIMESTAMP
-         WHERE event_id = $1 AND completed = FALSE AND (
-           (payer_id = $2 AND payee_id = $3) OR (payer_id = $3 AND payee_id = $2)
-         )`,
-		eventID, actorID, otherID,
-	)
-	if err != nil {
-		return false, err
-	}
-	return ct.RowsAffected() > 0, nil
-}
-
 // ListPendingSettlementTasks returns unsettled tasks for an event.
 func (db *DB) ListPendingSettlementTasks(ctx context.Context, eventID int64) ([]SettlementTaskRow, error) {
 	rows, err := db.pool.Query(ctx,
