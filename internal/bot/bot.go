@@ -24,7 +24,7 @@ func New(token string, database *db.DB) (*Bot, error) {
 	bot := &Bot{
 		session: session,
 		db:      database,
-		nomikai: nomikai.NewService(),
+		nomikai: nomikai.NewService(database),
 	}
 
 	// Register event handlers

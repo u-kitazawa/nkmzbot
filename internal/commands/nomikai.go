@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,13 +27,20 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 
     switch sub.Name {
     case "start":
-        err := svc.StartSession(channelID)
+        // Parse guild ID to int64
+        gid, errParse := strconv.ParseInt(i.GuildID, 10, 64)
+        if errParse != nil || gid == 0 {
+            respondText(s, i, "ギルドIDの取得に失敗しました")
+            return
+        }
+        // Defaults: rounding=1, remainder strategy="organizer"
+        err := svc.StartSession(context.Background(), channelID, gid, userID, 1, "organizer")
         respondSimple(s, i, err, "このチャンネルでセッションを開始しました", "既に開始されています")
     case "stop":
-        err := svc.StopSession(channelID)
+        err := svc.StopSession(context.Background(), channelID)
         respondSimple(s, i, err, "セッションを終了しました", "セッションが存在しません")
     case "join":
-        err := svc.Join(channelID, userID)
+        err := svc.Join(context.Background(), channelID, userID)
         respondSimple(s, i, err, "参加者として登録しました", "セッションが開始されていません")
     case "member":
         usersOpt := getStringOption(sub.Options, "users")
@@ -45,7 +54,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
             return
         }
         for _, id := range ids {
-            if err := svc.Join(channelID, id); err != nil {
+            if err := svc.Join(context.Background(), channelID, id); err != nil {
                 respondText(s, i, "セッションが開始されていません")
                 return
             }
@@ -75,7 +84,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         }
         var joinedIDs []string
         for _, id := range ids {
-            joined, _ := svc.SetWeight(channelID, id, *val)
+            joined, _ := svc.SetWeight(context.Background(), channelID, id, *val)
             if joined {
                 joinedIDs = append(joinedIDs, id)
             }
@@ -122,9 +131,9 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         var benJoined []string
         var err error
         if len(beneficiaries) > 0 {
-            joined, benJoined, err = svc.AddPaymentFor(channelID, payer, *amtOpt, memo, beneficiaries)
+            joined, benJoined, err = svc.AddPaymentFor(context.Background(), channelID, payer, *amtOpt, memo, beneficiaries)
         } else {
-            joined, err = svc.AddPayment(channelID, payer, *amtOpt, memo)
+            joined, err = svc.AddPayment(context.Background(), channelID, payer, *amtOpt, memo)
         }
         if err != nil {
             respondText(s, i, err.Error())
@@ -151,7 +160,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         }
         respondText(s, i, msg)
     case "settle":
-        res, err := svc.Settle(channelID)
+        res, err := svc.Settle(context.Background(), channelID)
         if err != nil {
             respondText(s, i, err.Error())
             return
@@ -162,14 +171,14 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
         }
         respondText(s, i, res.Summary)
     case "status":
-        txt, err := svc.Status(channelID)
+        txt, err := svc.Status(context.Background(), channelID)
         if err != nil {
             respondText(s, i, err.Error())
             return
         }
         respondText(s, i, txt)
     case "memberlist":
-        ids, err := svc.Members(channelID)
+        ids, err := svc.Members(context.Background(), channelID)
         if err != nil {
             respondText(s, i, err.Error())
             return
@@ -186,7 +195,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
             respondText(s, i, "相手の指定が必要です")
             return
         }
-        msg, err := svc.CompleteTask(channelID, userID, uid)
+        msg, err := svc.CompleteTask(context.Background(), channelID, userID, uid)
         if err != nil {
             respondText(s, i, err.Error())
             return
