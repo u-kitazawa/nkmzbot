@@ -10,9 +10,10 @@ import (
 )
 
 type Bot struct {
-	session *discordgo.Session
-	db      *db.DB
-	nomikai *nomikai.Service
+	session  *discordgo.Session
+	db       *db.DB
+	nomikai  *nomikai.Service
+	reminder *reminderWorker
 }
 
 func New(token string, database *db.DB) (*Bot, error) {
@@ -24,8 +25,9 @@ func New(token string, database *db.DB) (*Bot, error) {
 	bot := &Bot{
 		session: session,
 		db:      database,
-		nomikai: nomikai.NewService(),
+		nomikai: nomikai.NewService(database),
 	}
+	bot.reminder = newReminderWorker(session, database, bot.nomikai)
 
 	// Register event handlers
 	session.AddHandler(bot.onReady)
@@ -43,9 +45,13 @@ func (b *Bot) Start() error {
 		return fmt.Errorf("failed to open discord session: %w", err)
 	}
 	log.Println("Discord bot is running")
+	b.reminder.start()
 	return nil
 }
 
 func (b *Bot) Stop() error {
+	if b.reminder != nil {
+		b.reminder.stop()
+	}
 	return b.session.Close()
 }

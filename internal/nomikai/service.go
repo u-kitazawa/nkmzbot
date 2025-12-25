@@ -1,304 +1,463 @@
 package nomikai
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/susu3304/nkmzbot/internal/db"
 )
 
 type Service struct {
-    mu    sync.Mutex
-    store map[string]*Session
+	mu sync.Mutex
+	db *db.DB
 }
 
-func NewService() *Service {
-    return &Service{store: make(map[string]*Session)}
+func NewService(database *db.DB) *Service {
+	return &Service{db: database}
 }
 
-func (s *Service) StartSession(channelID string) error {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    if sess, ok := s.store[channelID]; ok {
-        if sess.Active {
-            return nil
-        }
-        sess.Active = true
-        return nil
-    }
-    s.store[channelID] = &Session{
-        ChannelID:   channelID,
-        Active:      true,
-        Participants: make(map[string]*Participant),
-    }
-    return nil
+func (s *Service) StartSession(ctx context.Context, channelID string, guildID int64, organizerID string, roundingUnit int, remainderStrategy string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if channelID == "" || guildID == 0 || organizerID == "" {
+		return errors.New("必要な情報が不足しています")
+	}
+	if _, err := s.db.ActiveEventByChannel(ctx, channelID); err == nil {
+		// already active; do nothing
+		return nil
+	}
+	_, err := s.db.CreateEvent(ctx, guildID, channelID, organizerID, roundingUnit, remainderStrategy)
+	return err
 }
 
-func (s *Service) StopSession(channelID string) error {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    if _, ok := s.store[channelID]; !ok {
-        return errors.New("セッションが存在しません")
-    }
-    delete(s.store, channelID)
-    return nil
+func (s *Service) StopSession(ctx context.Context, channelID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return errors.New("セッションが存在しません")
+	}
+	return s.db.CloseEvent(ctx, ev.ID)
 }
 
-func (s *Service) Join(channelID, userID string) error {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return errors.New("セッションが開始されていません")
-    }
-    if _, exists := sess.Participants[userID]; !exists {
-        sess.Participants[userID] = &Participant{UserID: userID, Weight: 1.0}
-    }
-    return nil
+func (s *Service) Join(ctx context.Context, channelID, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return errors.New("セッションが開始されていません")
+	}
+	return s.db.UpsertMember(ctx, ev.ID, userID, 1.0)
 }
 
-func (s *Service) SetWeight(channelID, userID string, w float64) (bool, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return false, errors.New("セッションが開始されていません")
-    }
-    p, exists := sess.Participants[userID]
-    if !exists {
-        p = &Participant{UserID: userID, Weight: 1.0}
-        sess.Participants[userID] = p
-        // Newly joined
-        joined := true
-        if w <= 0 {
-            w = 0
-        }
-        p.Weight = w
-        return joined, nil
-    }
-    if w <= 0 {
-        w = 0
-    }
-    p.Weight = w
-    return false, nil
+func (s *Service) SetWeight(ctx context.Context, channelID, userID string, w float64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return false, errors.New("セッションが開始されていません")
+	}
+	// detect existing
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return false, err
+	}
+	joined := true
+	for _, m := range members {
+		if m.UserID == userID {
+			joined = false
+			break
+		}
+	}
+	if w <= 0 {
+		w = 0
+	}
+	return joined, s.db.UpsertMember(ctx, ev.ID, userID, w)
 }
 
-func (s *Service) AddPayment(channelID, userID string, amount int64, memo string) (bool, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return false, errors.New("セッションが開始されていません")
-    }
-    p, exists := sess.Participants[userID]
-    if !exists {
-        p = &Participant{UserID: userID, Weight: 1.0}
-        sess.Participants[userID] = p
-        // Newly joined
-        joined := true
-        if p.PaidSum+amount < 0 {
-            return false, errors.New("訂正額により合計が負になります")
-        }
-        p.PaidSum += amount
-        sess.Payments = append(sess.Payments, Payment{PayerID: userID, Amount: amount, Memo: memo})
-        return joined, nil
-    }
-    if p.PaidSum+amount < 0 {
-        return false, errors.New("訂正額により合計が負になります")
-    }
-    p.PaidSum += amount
-    sess.Payments = append(sess.Payments, Payment{PayerID: userID, Amount: amount, Memo: memo})
-    return false, nil
+func (s *Service) AddPayment(ctx context.Context, channelID, userID string, amount int64, memo string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return false, errors.New("セッションが開始されていません")
+	}
+	// auto-join if not exists
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return false, err
+	}
+	joined := true
+	for _, m := range members {
+		if m.UserID == userID {
+			joined = false
+			break
+		}
+	}
+	if joined {
+		if err := s.db.UpsertMember(ctx, ev.ID, userID, 1.0); err != nil {
+			return false, err
+		}
+	}
+	if amount == 0 {
+		return joined, nil
+	}
+	_, err = s.db.AddPayment(ctx, ev.ID, userID, amount, memo, nil)
+	if err != nil {
+		return false, err
+	}
+	return joined, nil
 }
 
 // AddPaymentFor records a payment by payer for specific beneficiaries. If beneficiaries is empty, use AddPayment instead.
 // Returns: payerJoined, beneficiariesJoinedIDs, error
-func (s *Service) AddPaymentFor(channelID, payerID string, amount int64, memo string, beneficiaries []string) (bool, []string, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return false, nil, errors.New("セッションが開始されていません")
-    }
-    // Ensure payer exists
-    p, exists := sess.Participants[payerID]
-    joined := false
-    if !exists {
-        p = &Participant{UserID: payerID, Weight: 1.0}
-        sess.Participants[payerID] = p
-        joined = true
-    }
-    if p.PaidSum+amount < 0 {
-        return false, nil, errors.New("訂正額により合計が負になります")
-    }
-    // Ensure beneficiaries exist as participants (auto-join)
-    // Also normalize: remove duplicates and empties
-    uniq := make(map[string]struct{}, len(beneficiaries))
-    var ben []string
-    var benJoined []string
-    for _, id := range beneficiaries {
-        if id == "" { continue }
-        if _, seen := uniq[id]; seen { continue }
-        uniq[id] = struct{}{}
-        if _, ok := sess.Participants[id]; !ok {
-            sess.Participants[id] = &Participant{UserID: id, Weight: 1.0}
-            benJoined = append(benJoined, id)
-        }
-        ben = append(ben, id)
-    }
-    p.PaidSum += amount
-    sess.Payments = append(sess.Payments, Payment{PayerID: payerID, Amount: amount, Memo: memo, Beneficiaries: ben})
-    return joined, benJoined, nil
+func (s *Service) AddPaymentFor(ctx context.Context, channelID, payerID string, amount int64, memo string, beneficiaries []string) (bool, []string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return false, nil, errors.New("セッションが開始されていません")
+	}
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return false, nil, err
+	}
+	joined := true
+	for _, m := range members {
+		if m.UserID == payerID {
+			joined = false
+			break
+		}
+	}
+	if joined {
+		if err := s.db.UpsertMember(ctx, ev.ID, payerID, 1.0); err != nil {
+			return false, nil, err
+		}
+	}
+	// normalize beneficiaries and ensure membership
+	uniq := make(map[string]struct{}, len(beneficiaries))
+	var ben []string
+	var benJoined []string
+	for _, id := range beneficiaries {
+		if id == "" {
+			continue
+		}
+		if _, seen := uniq[id]; seen {
+			continue
+		}
+		uniq[id] = struct{}{}
+		ben = append(ben, id)
+		present := false
+		for _, m := range members {
+			if m.UserID == id {
+				present = true
+				break
+			}
+		}
+		if !present {
+			if err := s.db.UpsertMember(ctx, ev.ID, id, 1.0); err != nil {
+				return false, nil, err
+			}
+			benJoined = append(benJoined, id)
+		}
+	}
+	if amount == 0 {
+		return joined, benJoined, nil
+	}
+	if _, err := s.db.AddPayment(ctx, ev.ID, payerID, amount, memo, ben); err != nil {
+		return false, nil, err
+	}
+	return joined, benJoined, nil
 }
 
-func (s *Service) Status(channelID string) (string, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return "セッションが開始されていません", nil
-    }
-    if len(sess.Participants) == 0 {
-        return "参加者がいません", nil
-    }
-    var total int64
-    var wsum float64
-    type row struct{ uid string; w float64; paid int64 }
-    var rows []row
-    for uid, p := range sess.Participants {
-        total += p.PaidSum
-        wsum += p.Weight
-        rows = append(rows, row{uid: uid, w: p.Weight, paid: p.PaidSum})
-    }
-    sort.Slice(rows, func(i, j int) bool { return rows[i].uid < rows[j].uid })
-    var b strings.Builder
-    fmt.Fprintf(&b, "総支出: %d 円\n", total)
-    for _, r := range rows {
-        fmt.Fprintf(&b, "<@%s> weight=%.2f paid=%d\n", r.uid, r.w, r.paid)
-    }
-    return b.String(), nil
+func (s *Service) Status(ctx context.Context, channelID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return "エラー: 参加者取得に失敗", err
+	}
+	if len(members) == 0 {
+		return "参加者がいません", nil
+	}
+	pays, err := s.db.Payments(ctx, ev.ID)
+	if err != nil {
+		return "エラー: 支払い取得に失敗", err
+	}
+	paidSum := make(map[string]int64)
+	for _, p := range pays {
+		paidSum[p.PayerID] += p.Amount
+	}
+	sort.Slice(members, func(i, j int) bool { return members[i].UserID < members[j].UserID })
+	var total int64
+	for _, p := range pays {
+		total += p.Amount
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "総支出: %d 円\n", total)
+	for _, m := range members {
+		fmt.Fprintf(&b, "<@%s> weight=%.2f paid=%d\n", m.UserID, m.Weight, paidSum[m.UserID])
+	}
+	return b.String(), nil
 }
 
 // Members returns the list of participant user IDs for the channel session.
-func (s *Service) Members(channelID string) ([]string, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return nil, errors.New("セッションが開始されていません")
-    }
-    ids := make([]string, 0, len(sess.Participants))
-    for uid := range sess.Participants {
-        ids = append(ids, uid)
-    }
-    sort.Strings(ids)
-    return ids, nil
+func (s *Service) Members(ctx context.Context, channelID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return nil, errors.New("セッションが開始されていません")
+	}
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(members))
+	for _, m := range members {
+		ids = append(ids, m.UserID)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
-func (s *Service) Settle(channelID string) (*SettleResult, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return nil, errors.New("セッションが開始されていません")
-    }
-    if len(sess.Participants) < 2 {
-        return nil, errors.New("参加者が2人以上必要です")
-    }
-    // Compute charges per user based on payment-level beneficiaries
-    type bal struct{ uid string; net float64 }
-    charges := make(map[string]float64, len(sess.Participants))
-    // Iterate payments and distribute cost among beneficiaries (or all participants if none)
-    for _, pay := range sess.Payments {
-        var targetIDs []string
-        if len(pay.Beneficiaries) > 0 {
-            targetIDs = pay.Beneficiaries
-        } else {
-            targetIDs = make([]string, 0, len(sess.Participants))
-            for uid := range sess.Participants { targetIDs = append(targetIDs, uid) }
-        }
-        // sum weights of targets
-        var wsum float64
-        for _, uid := range targetIDs {
-            if p, ok := sess.Participants[uid]; ok {
-                wsum += p.Weight
-            }
-        }
-        if wsum == 0 {
-            continue // cannot allocate
-        }
-        for _, uid := range targetIDs {
-            if p, ok := sess.Participants[uid]; ok {
-                share := float64(pay.Amount) * (p.Weight / wsum)
-                charges[uid] += share
-            }
-        }
-    }
-    var pos, neg []bal
-    for uid, p := range sess.Participants {
-        net := float64(p.PaidSum) - charges[uid]
-        if net > 0 {
-            pos = append(pos, bal{uid: uid, net: net})
-        } else if net < 0 {
-            neg = append(neg, bal{uid: uid, net: -net})
-        }
-    }
-    sort.Slice(pos, func(i, j int) bool { return pos[i].net > pos[j].net })
-    sort.Slice(neg, func(i, j int) bool { return neg[i].net > neg[j].net })
-    var tasks []SettlementTask
-    i, j := 0, 0
-    for i < len(pos) && j < len(neg) {
-        c := pos[i]
-        d := neg[j]
-        amt := math.Min(c.net, d.net)
-        ia := int64(math.Round(amt))
-        if ia > 0 {
-            tasks = append(tasks, SettlementTask{PayerID: d.uid, PayeeID: c.uid, Amount: ia})
-        }
-        c.net -= amt
-        d.net -= amt
-        if c.net <= 1e-9 {
-            i++
-        } else {
-            pos[i] = c
-        }
-        if d.net <= 1e-9 {
-            j++
-        } else {
-            neg[j] = d
-        }
-    }
-    sess.Tasks = tasks
-    var b strings.Builder
-    if len(tasks) == 0 {
-        b.WriteString("精算は不要です")
-    } else {
-        b.WriteString("支払タスク:\n")
-        for _, t := range tasks {
-            fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
-        }
-    }
-    return &SettleResult{Tasks: tasks, Summary: b.String()}, nil
+func (s *Service) Settle(ctx context.Context, channelID string) (*SettleResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return nil, errors.New("セッションが開始されていません")
+	}
+	members, err := s.db.Members(ctx, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(members) < 2 {
+		return nil, errors.New("参加者が2人以上必要です")
+	}
+	pays, err := s.db.Payments(ctx, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	// Build map of weights
+	weights := make(map[string]float64, len(members))
+	for _, m := range members {
+		weights[m.UserID] = m.Weight
+	}
+	// Compute charges by beneficiaries
+	type bal struct {
+		uid string
+		net float64
+	}
+	charges := make(map[string]float64, len(members))
+	paidSum := make(map[string]float64, len(members))
+	for _, p := range pays {
+		paidSum[p.PayerID] += float64(p.Amount)
+	}
+	for _, pay := range pays {
+		// beneficiaries
+		ben, err := s.db.PaymentBeneficiaries(ctx, pay.ID)
+		if err != nil {
+			return nil, err
+		}
+		var targets []string
+		if len(ben) > 0 {
+			targets = ben
+		} else {
+			targets = make([]string, 0, len(members))
+			for _, m := range members {
+				targets = append(targets, m.UserID)
+			}
+		}
+		var wsum float64
+		for _, uid := range targets {
+			wsum += weights[uid]
+		}
+		if wsum == 0 {
+			continue
+		}
+		for _, uid := range targets {
+			share := float64(pay.Amount) * (weights[uid] / wsum)
+			charges[uid] += share
+		}
+	}
+	var pos, neg []bal
+	for uid := range weights {
+		net := paidSum[uid] - charges[uid]
+		if net > 0 {
+			pos = append(pos, bal{uid: uid, net: net})
+		} else if net < 0 {
+			neg = append(neg, bal{uid: uid, net: -net})
+		}
+	}
+	sort.Slice(pos, func(i, j int) bool { return pos[i].net > pos[j].net })
+	sort.Slice(neg, func(i, j int) bool { return neg[i].net > neg[j].net })
+	var tasks []SettlementTask
+	var rows []db.SettlementTaskRow
+	i, j := 0, 0
+	for i < len(pos) && j < len(neg) {
+		c := pos[i]
+		d := neg[j]
+		amt := math.Min(c.net, d.net)
+		ia := int64(math.Round(amt))
+		if ia > 0 {
+			tasks = append(tasks, SettlementTask{PayerID: d.uid, PayeeID: c.uid, Amount: ia})
+			rows = append(rows, db.SettlementTaskRow{PayerID: d.uid, PayeeID: c.uid, Amount: ia})
+		}
+		c.net -= amt
+		d.net -= amt
+		if c.net <= 1e-9 {
+			i++
+		} else {
+			pos[i] = c
+		}
+		if d.net <= 1e-9 {
+			j++
+		} else {
+			neg[j] = d
+		}
+	}
+	// Persist tasks
+	if err := s.db.SetSettlementTasks(ctx, ev.ID, rows); err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	if len(tasks) == 0 {
+		b.WriteString("精算は不要です")
+	} else {
+		b.WriteString("支払タスク:\n")
+		for _, t := range tasks {
+			fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
+		}
+	}
+	return &SettleResult{Tasks: tasks, Summary: b.String()}, nil
 }
 
-func (s *Service) CompleteTask(channelID, actorID, otherID string) (string, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    sess, ok := s.store[channelID]
-    if !ok || !sess.Active {
-        return "セッションが開始されていません", nil
-    }
-    for idx := range sess.Tasks {
-        t := &sess.Tasks[idx]
-        if t.Completed {
-            continue
-        }
-        if (t.PayerID == actorID && t.PayeeID == otherID) || (t.PayerID == otherID && t.PayeeID == actorID) {
-            t.Completed = true
-            return fmt.Sprintf("完了しました: <@%s> ↔ <@%s> %d 円", t.PayerID, t.PayeeID, t.Amount), nil
-        }
-    }
-    return "対象のタスクが見つかりません", nil
+// ConfigureReminder enables or disables periodic reminders and schedules the next run.
+func (s *Service) ConfigureReminder(ctx context.Context, channelID string, intervalMinutes int, disable bool, sendNow bool) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1440
+	}
+	if intervalMinutes < 1 {
+		intervalMinutes = 1
+	}
+
+	if disable {
+		if err := s.db.UpsertReminder(ctx, ev.ID, false, intervalMinutes, nil); err != nil {
+			return "リマインド設定の更新に失敗しました", err
+		}
+		return "リマインドを停止しました", nil
+	}
+
+	if sendNow {
+		msg, err := s.reminderMessage(ctx, ev.ID)
+		if err != nil {
+			return "リマインド本文の生成に失敗しました", err
+		}
+		// 未払いがない場合は「次回送信」を案内すると違和感があるので、
+		// next_due_at を NULL にして「未払いがある時だけ送信」モードにする。
+		if msg == "未払いのタスクはありません" {
+			if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, nil); err != nil {
+				return "リマインド設定の更新に失敗しました", err
+			}
+			return msg + "\nリマインドは有効です（未払いがあるときのみ自動送信します）", nil
+		}
+
+		next := time.Now().Add(time.Duration(intervalMinutes) * time.Minute)
+		if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, &next); err != nil {
+			return "リマインド設定の更新に失敗しました", err
+		}
+		return msg + fmt.Sprintf("\n次回は約 %d 分後に自動送信します", intervalMinutes), nil
+	}
+
+	next := time.Now().Add(time.Duration(intervalMinutes) * time.Minute)
+	if err := s.db.UpsertReminder(ctx, ev.ID, true, intervalMinutes, &next); err != nil {
+		return "リマインド設定の更新に失敗しました", err
+	}
+	return fmt.Sprintf("リマインドを有効化しました。次回は約 %d 分後に送信します", intervalMinutes), nil
+}
+
+// ReminderMessage creates the current unpaid summary for a channel's event.
+func (s *Service) ReminderMessage(ctx context.Context, channelID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+	return s.reminderMessage(ctx, ev.ID)
+}
+
+// ReminderMessageByEventID builds a reminder body for a known event.
+func (s *Service) ReminderMessageByEventID(ctx context.Context, eventID int64) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reminderMessage(ctx, eventID)
+}
+
+// RegisterPayment records a settlement payment between payer and payee and updates tasks.
+func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string) (string, error) {
+	if amount <= 0 {
+		return "金額は正の値で指定してください", nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
+	if err != nil {
+		return "セッションが開始されていません", nil
+	}
+
+	remaining, err := s.db.RecordSettlementPayment(ctx, ev.ID, payerID, payeeID, amount, memo, actorID)
+	if err != nil {
+		return "支払いの登録に失敗しました", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "支払いを記録しました: <@%s> → <@%s> %d 円", payerID, payeeID, amount)
+	if memo != "" {
+		fmt.Fprintf(&b, " (%s)", memo)
+	}
+	if remaining > 0 {
+		fmt.Fprintf(&b, "\nこのペアの未払い残高: %d 円", remaining)
+	} else {
+		b.WriteString("\nこのペアの未払いタスクは解消されました")
+	}
+	return b.String(), nil
+}
+
+func (s *Service) reminderMessage(ctx context.Context, eventID int64) (string, error) {
+	tasks, err := s.db.ListPendingSettlementTasks(ctx, eventID)
+	if err != nil {
+		return "", err
+	}
+	if len(tasks) == 0 {
+		return "未払いのタスクはありません", nil
+	}
+
+	var b strings.Builder
+	b.WriteString("未払いのリマインドです。対応をお願いします。\n")
+	for _, t := range tasks {
+		fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
