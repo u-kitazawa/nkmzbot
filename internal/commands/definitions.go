@@ -193,10 +193,11 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Required:    true,
 						},
 						{
-							Type:        discordgo.ApplicationCommandOptionInteger,
-							Name:        "amount",
-							Description: "支払った金額 (円)",
-							Required:    true,
+							Type:         discordgo.ApplicationCommandOptionString,
+							Name:         "amount",
+							Description:  "支払った金額 (円) / all=未払い全額",
+							Required:     true,
+							Autocomplete: true,
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionUser,

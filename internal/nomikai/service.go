@@ -454,8 +454,9 @@ func (s *Service) ReminderMessageByEventID(ctx context.Context, eventID int64) (
 }
 
 // RegisterPayment records a settlement payment between payer and payee and updates tasks.
-func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string) (string, error) {
-	if amount <= 0 {
+// If payAll is true, amount is ignored and the full outstanding amount is used.
+func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string, payAll bool) (string, error) {
+	if !payAll && amount <= 0 {
 		return "金額は正の値で指定してください", nil
 	}
 
@@ -465,6 +466,23 @@ func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payee
 	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
 	if err != nil {
 		return "セッションが開始されていません", nil
+	}
+
+	if payAll {
+		paidAmount, err := s.db.RecordSettlementPaymentAll(ctx, ev.ID, payerID, payeeID, memo, actorID)
+		if err != nil {
+			return "支払いの登録に失敗しました", err
+		}
+		if paidAmount <= 0 {
+			return "未払いタスクがありません（先に /nomikai settle を実行してください）", nil
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "支払いを記録しました: <@%s> → <@%s> 未払い全額 %d 円", payerID, payeeID, paidAmount)
+		if memo != "" {
+			fmt.Fprintf(&b, " (%s)", memo)
+		}
+		b.WriteString("\nこのペアの未払いタスクは解消されました")
+		return b.String(), nil
 	}
 
 	remaining, err := s.db.RecordSettlementPayment(ctx, ev.ID, payerID, payeeID, amount, memo, actorID)

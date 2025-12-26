@@ -235,9 +235,9 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		respondText(s, i, msg)
 	case "seisan":
-		amtOpt := getIntOption(sub.Options, "amount")
-		if amtOpt == nil || *amtOpt <= 0 {
-			respondText(s, i, "amount は正の数で指定してください")
+		amtStrOpt := getStringOption(sub.Options, "amount")
+		if amtStrOpt == nil {
+			respondText(s, i, "amount の指定が必要です")
 			return
 		}
 		payee := getUserID(data, sub, "to")
@@ -253,7 +253,23 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		if opt := getStringOption(sub.Options, "memo"); opt != nil {
 			memo = *opt
 		}
-		msg, err := svc.RegisterPayment(context.Background(), channelID, payer, payee, *amtOpt, memo, userID)
+
+		amountStr := strings.TrimSpace(*amtStrOpt)
+		payAll := false
+		amount := int64(0)
+		switch strings.ToLower(amountStr) {
+		case "all", "zenbu", "全部", "全額":
+			payAll = true
+		default:
+			v, err := strconv.ParseInt(amountStr, 10, 64)
+			if err != nil || v <= 0 {
+				respondText(s, i, "amount は正の数、または all を指定してください")
+				return
+			}
+			amount = v
+		}
+
+		msg, err := svc.RegisterPayment(context.Background(), channelID, payer, payee, amount, memo, userID, payAll)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
