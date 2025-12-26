@@ -291,6 +291,32 @@ func (db *DB) ListPendingSettlementTasks(ctx context.Context, eventID int64) ([]
 	return tasks, rows.Err()
 }
 
+// ListSettlementPaymentsSum returns total settlement payments per payer/payee pair for an event.
+func (db *DB) ListSettlementPaymentsSum(ctx context.Context, eventID int64) ([]SettlementTaskRow, error) {
+	rows, err := db.pool.Query(ctx,
+		`SELECT payer_id, payee_id, COALESCE(SUM(amount), 0)
+		 FROM nomikai_task_payments
+		 WHERE event_id = $1
+		 GROUP BY payer_id, payee_id
+		 ORDER BY payer_id, payee_id`,
+		eventID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SettlementTaskRow
+	for rows.Next() {
+		var r SettlementTaskRow
+		if err := rows.Scan(&r.PayerID, &r.PayeeID, &r.Amount); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // DueReminders returns reminder targets that are due and still have pending tasks.
 func (db *DB) DueReminders(ctx context.Context, now time.Time) ([]ReminderDue, error) {
 	rows, err := db.pool.Query(ctx,

@@ -208,6 +208,18 @@ func (s *Service) Status(ctx context.Context, channelID string) (string, error) 
 	for _, m := range members {
 		fmt.Fprintf(&b, "<@%s> weight=%.2f paid=%d\n", m.UserID, m.Weight, paidSum[m.UserID])
 	}
+
+	// Show current pending settlement tasks (reflects /nomikai seisan).
+	tasks, err := s.db.ListPendingSettlementTasks(ctx, ev.ID)
+	if err != nil {
+		return "エラー: 未払いタスク取得に失敗", err
+	}
+	if len(tasks) > 0 {
+		b.WriteString("\n未払いタスク:\n")
+		for _, t := range tasks {
+			fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
+		}
+	}
 	return b.String(), nil
 }
 
@@ -291,9 +303,29 @@ func (s *Service) Settle(ctx context.Context, channelID string) (*SettleResult, 
 			charges[uid] += share
 		}
 	}
-	var pos, neg []bal
+	// Base balance per user: positive means they should receive, negative means they should pay.
+	balance := make(map[string]float64, len(weights))
 	for uid := range weights {
-		net := paidSum[uid] - charges[uid]
+		balance[uid] = paidSum[uid] - charges[uid]
+	}
+
+	// Apply already-registered settlement payments (seisan) to balances.
+	// If A pays B, A's balance increases (less debt), B's balance decreases (less receivable).
+	paidRows, err := s.db.ListSettlementPaymentsSum(ctx, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, pr := range paidRows {
+		if _, ok := balance[pr.PayerID]; ok {
+			balance[pr.PayerID] += float64(pr.Amount)
+		}
+		if _, ok := balance[pr.PayeeID]; ok {
+			balance[pr.PayeeID] -= float64(pr.Amount)
+		}
+	}
+
+	var pos, neg []bal
+	for uid, net := range balance {
 		if net > 0 {
 			pos = append(pos, bal{uid: uid, net: net})
 		} else if net < 0 {
