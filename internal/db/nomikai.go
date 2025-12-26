@@ -304,6 +304,17 @@ func (db *DB) MarkReminderSent(ctx context.Context, eventID int64, sentAt time.T
 	return err
 }
 
+// DelayReminder updates next_due_at without touching last_sent_at.
+func (db *DB) DelayReminder(ctx context.Context, eventID int64, nextDue time.Time) error {
+	_, err := db.pool.Exec(ctx,
+		`UPDATE nomikai_reminders
+		 SET next_due_at = $2
+		 WHERE event_id = $1`,
+		eventID, nextDue,
+	)
+	return err
+}
+
 // RecordSettlementPayment logs a settlement payment and reduces outstanding tasks (payer -> payee).
 // Returns the remaining unsettled amount for the pair after applying the payment.
 func (db *DB) RecordSettlementPayment(ctx context.Context, eventID int64, payerID, payeeID string, amount int64, memo, recordedBy string) (int64, error) {
