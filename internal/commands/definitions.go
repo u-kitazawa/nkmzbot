@@ -56,6 +56,43 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:         "jikan",
+			Description:  "スケジュール実行を管理します",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "add",
+					Description: "指定された時間にコマンドを実行します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "command",
+							Description: "実行するコマンド（例: nomikai start, または任意のメッセージ）",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "time",
+							Description: "実行する時間（HH:MM または YYYY-MM-DD HH:MM）",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionBoolean,
+							Name:        "repeat",
+							Description: "毎日繰り返すかどうか",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "list",
+					Description: "予約されているコマンド一覧を表示します",
+				},
+			},
+		},
+		{
 			Name:         "list",
 			Description:  "登録されているコマンド一覧を表示します",
 			DMPermission: boolPtr(false),
