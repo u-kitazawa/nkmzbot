@@ -110,7 +110,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			}
 			respondText(s, i, msg)
 		}
-	case "pay":
+	case "tatekae":
 		amtOpt := getIntOption(sub.Options, "amount")
 		memoOpt := getStringOption(sub.Options, "memo")
 		forOpt := getStringOption(sub.Options, "for")
@@ -234,7 +234,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			return
 		}
 		respondText(s, i, msg)
-	case "paid":
+	case "seisan":
 		amtOpt := getIntOption(sub.Options, "amount")
 		if amtOpt == nil || *amtOpt <= 0 {
 			respondText(s, i, "amount は正の数で指定してください")

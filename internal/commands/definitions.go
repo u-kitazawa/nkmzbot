@@ -114,8 +114,8 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "pay",
-					Description: "自分の立替額を記録（負額も可）",
+					Name:        "tatekae",
+					Description: "立替（支出）を記録（負額も可）",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
 							Type:        discordgo.ApplicationCommandOptionInteger,
@@ -183,8 +183,8 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "paid",
-					Description: "実際の支払いを登録して未払いを減らす",
+					Name:        "seisan",
+					Description: "精算の支払いを登録して未払いを減らす",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
 							Type:        discordgo.ApplicationCommandOptionUser,
