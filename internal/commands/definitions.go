@@ -170,10 +170,14 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Required:    false,
 						},
 						{
-							Type:        discordgo.ApplicationCommandOptionBoolean,
-							Name:        "disable",
-							Description: "有効化ではなく停止する",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "state",
+							Description: "on/off (on=有効, off=停止)",
 							Required:    false,
+							Choices: []*discordgo.ApplicationCommandOptionChoice{
+								{Name: "on", Value: "on"},
+								{Name: "off", Value: "off"},
+							},
 						},
 					},
 				},

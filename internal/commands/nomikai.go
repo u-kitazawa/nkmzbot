@@ -202,7 +202,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		respondText(s, i, b.String())
 	case "remind":
-		intervalMinutes := 1440
+		intervalMinutes := 0
 		if opt := getStringOption(sub.Options, "interval"); opt != nil {
 			mins, err := parseDHMToMinutes(*opt)
 			if err != nil {
@@ -212,8 +212,21 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			intervalMinutes = mins
 		}
 		disable := false
-		if opt := getBoolOption(sub.Options, "disable"); opt != nil {
-			disable = *opt
+		if opt := getStringOption(sub.Options, "state"); opt != nil {
+			state := strings.ToLower(strings.TrimSpace(*opt))
+			switch state {
+			case "on", "enable":
+				disable = false
+			case "off", "disable":
+				disable = true
+			case "オン":
+				disable = false
+			case "オフ":
+				disable = true
+			default:
+				respondText(s, i, "state は on/off で指定してください")
+				return
+			}
 		}
 		msg, err := svc.ConfigureReminder(context.Background(), channelID, intervalMinutes, disable, true)
 		if err != nil {

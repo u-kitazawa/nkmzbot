@@ -353,7 +353,15 @@ func (s *Service) ConfigureReminder(ctx context.Context, channelID string, inter
 		return "セッションが開始されていません", nil
 	}
 	if intervalMinutes <= 0 {
-		intervalMinutes = 1440
+		cfg, err := s.db.ReminderConfig(ctx, ev.ID)
+		if err != nil {
+			return "リマインド設定の取得に失敗しました", err
+		}
+		if cfg != nil && cfg.IntervalMinutes > 0 {
+			intervalMinutes = cfg.IntervalMinutes
+		} else {
+			intervalMinutes = 1440
+		}
 	}
 	if intervalMinutes < 1 {
 		intervalMinutes = 1

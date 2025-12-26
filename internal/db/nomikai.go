@@ -2,9 +2,18 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
+
+type ReminderConfig struct {
+	Enabled         bool
+	IntervalMinutes int
+	NextDueAt       *time.Time
+}
 
 type NomikaiEvent struct {
 	ID                int64
@@ -173,6 +182,25 @@ func (db *DB) UpsertReminder(ctx context.Context, eventID int64, enabled bool, i
 		eventID, enabled, intervalMinutes, nextDueAt,
 	)
 	return err
+}
+
+func (db *DB) ReminderConfig(ctx context.Context, eventID int64) (*ReminderConfig, error) {
+	row := db.pool.QueryRow(ctx,
+		`SELECT enabled, interval_minutes, next_due_at
+		 FROM nomikai_reminders
+		 WHERE event_id = $1`,
+		eventID,
+	)
+	var cfg ReminderConfig
+	var nextDueAt *time.Time
+	if err := row.Scan(&cfg.Enabled, &cfg.IntervalMinutes, &nextDueAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	cfg.NextDueAt = nextDueAt
+	return &cfg, nil
 }
 
 // InsertDebt records a cross-session debt.
