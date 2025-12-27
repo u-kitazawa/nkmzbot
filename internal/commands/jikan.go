@@ -53,11 +53,10 @@ func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomik
 
 		// For repeating tasks that are past, update to next occurrence
 		if dbTask.Time.Before(now) && dbTask.Repeat {
-			// Calculate next occurrence
-			nextTime := dbTask.Time
-			for nextTime.Before(now) {
-				nextTime = nextTime.Add(24 * time.Hour)
-			}
+			// Calculate next occurrence efficiently
+			daysPast := int(now.Sub(dbTask.Time).Hours() / 24)
+			daysToAdd := daysPast + 1
+			nextTime := dbTask.Time.Add(time.Duration(daysToAdd) * 24 * time.Hour)
 			dbTask.Time = nextTime
 			if err := database.UpdateScheduledTaskTime(ctx, dbTask.ID, nextTime); err != nil {
 				log.Printf("Failed to update task %d time: %v", dbTask.ID, err)
@@ -212,6 +211,11 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 	now := time.Now()
 	duration := task.Time.Sub(now)
 
+	// Validate that duration is positive, otherwise schedule immediately
+	if duration < 0 {
+		duration = 0
+	}
+
 	time.AfterFunc(duration, func() {
 		// Execute
 		guildIDStr := strconv.FormatInt(task.GuildID, 10)
@@ -225,7 +229,10 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 			return
 		}
 
-		ctx := context.Background()
+		// Use timeout context for database operations
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		if task.Repeat {
 			// Update time for next run
 			task.Time = task.Time.Add(24 * time.Hour)
