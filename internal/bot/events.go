@@ -81,6 +81,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleList(s, i, b.db)
 	case "nomikai":
 		commands.HandleNomikai(s, i, b.nomikai)
+	case "jikan":
+		commands.HandleJikan(s, i, b.nomikai, b.db)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
 	}
