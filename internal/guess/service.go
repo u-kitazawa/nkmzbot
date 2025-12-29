@@ -69,7 +69,7 @@ func (s *Service) StartSession(ctx context.Context, channelID string, guildID in
 		INSERT INTO guess_sessions (channel_id, guild_id, organizer_id, status, max_error_distance)
 		VALUES ($1, $2, $3, 'active', $4)
 	`
-	_, err := s.db.Exec(ctx, query, channelID, guildID, organizerID, DefaultMaxErrorDistance)
+	_, err := s.db.Pool().Exec(ctx, query, channelID, guildID, organizerID, DefaultMaxErrorDistance)
 	if err != nil {
 		// Check for unique constraint violation
 		var pgErr *pgconn.PgError
@@ -88,7 +88,7 @@ func (s *Service) StopSession(ctx context.Context, channelID string) error {
 		SET status = 'closed', closed_at = CURRENT_TIMESTAMP
 		WHERE channel_id = $1 AND status = 'active'
 	`
-	result, err := s.db.Exec(ctx, query, channelID)
+	result, err := s.db.Pool().Exec(ctx, query, channelID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (s *Service) GetActiveSession(ctx context.Context, channelID string) (*Sess
 		WHERE channel_id = $1 AND status = 'active'
 	`
 	var sess Session
-	err := s.db.QueryRow(ctx, query, channelID).Scan(
+	err := s.db.Pool().QueryRow(ctx, query, channelID).Scan(
 		&sess.ID, &sess.ChannelID, &sess.GuildID, &sess.OrganizerID, &sess.Status,
 		&sess.AnswerLat, &sess.AnswerLng, &sess.AnswerURL, &sess.MaxErrorDistance,
 		&sess.CreatedAt, &sess.ClosedAt,
@@ -132,7 +132,7 @@ func (s *Service) AddGuess(ctx context.Context, channelID, userID string, guessL
 		INSERT INTO guess_guesses (session_id, user_id, guess_lat, guess_lng, guess_url)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err = s.db.Exec(ctx, query, sess.ID, userID, guessLat, guessLng, guessURL)
+	_, err = s.db.Pool().Exec(ctx, query, sess.ID, userID, guessLat, guessLng, guessURL)
 	if err != nil {
 		// Check for unique constraint violation
 		var pgErr *pgconn.PgError
@@ -157,7 +157,7 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 		SET answer_lat = $1, answer_lng = $2, answer_url = $3
 		WHERE id = $4
 	`
-	_, err = s.db.Exec(ctx, updateQuery, answerLat, answerLng, answerURL, sess.ID)
+	_, err = s.db.Pool().Exec(ctx, updateQuery, answerLat, answerLng, answerURL, sess.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 		WHERE session_id = $1
 		ORDER BY created_at ASC
 	`
-	rows, err := s.db.Query(ctx, guessQuery, sess.ID)
+	rows, err := s.db.Pool().Query(ctx, guessQuery, sess.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 			SET score = $1, distance_meters = $2
 			WHERE id = $3
 		`
-		_, err := s.db.Exec(ctx, scoreUpdateQuery, score, distance, guessID)
+		_, err := s.db.Pool().Exec(ctx, scoreUpdateQuery, score, distance, guessID)
 		if err != nil {
 			return nil, err
 		}

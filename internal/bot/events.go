@@ -2,7 +2,9 @@ package bot
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -62,9 +64,87 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
 		b.handleApplicationCommand(s, i)
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		b.handleApplicationCommandAutocomplete(s, i)
 	case discordgo.InteractionModalSubmit:
 		b.handleModalSubmit(s, i)
 	}
+}
+
+func (b *Bot) handleApplicationCommandAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	data := i.ApplicationCommandData()
+	if data.Name != "nomikai" {
+		return
+	}
+	if len(data.Options) == 0 {
+		return
+	}
+	sub := data.Options[0]
+	if sub.Name != "seisan" {
+		return
+	}
+
+	// Find focused option in the subcommand.
+	focusedName := ""
+	userInput := ""
+	for _, opt := range sub.Options {
+		if opt.Focused {
+			focusedName = opt.Name
+			userInput = opt.StringValue()
+			break
+		}
+	}
+	if focusedName != "amount" {
+		return
+	}
+
+	payeeID := ""
+	payerID := ""
+	for _, opt := range sub.Options {
+		switch opt.Name {
+		case "to":
+			if id, ok := opt.Value.(string); ok {
+				payeeID = id
+			}
+		case "payer":
+			if id, ok := opt.Value.(string); ok {
+				payerID = id
+			}
+		}
+	}
+	if payerID == "" && i.Member != nil && i.Member.User != nil {
+		payerID = i.Member.User.ID
+	}
+
+	choices := []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "all（未払い全額）", Value: "all"},
+	}
+
+	// If we can compute outstanding amount for the pair, also offer it as a one-click numeric choice.
+	if payerID != "" && payeeID != "" {
+		ev, err := b.db.ActiveEventByChannel(context.Background(), i.ChannelID)
+		if err == nil && ev != nil {
+			out, err := b.db.OutstandingSettlementAmount(context.Background(), ev.ID, payerID, payeeID)
+			if err == nil && out > 0 {
+				choices = append([]*discordgo.ApplicationCommandOptionChoice{
+					{Name: fmt.Sprintf("%d（未払い全額）", out), Value: strconv.FormatInt(out, 10)},
+				}, choices...)
+			}
+		}
+	}
+
+	// If user typed something, echo it as a choice so they can commit it quickly.
+	if strings.TrimSpace(userInput) != "" {
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: userInput, Value: userInput})
+	}
+	if len(choices) > 25 {
+		choices = choices[:25]
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	})
 }
 
 func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -83,6 +163,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "guess":
 		commands.HandleGuess(s, i, b.guess)
+	case "jikan":
+		commands.HandleJikan(s, i, b.nomikai, b.db)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
 	}
