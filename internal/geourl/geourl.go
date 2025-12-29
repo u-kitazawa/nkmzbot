@@ -18,9 +18,10 @@ const (
 )
 
 var (
-	reAt   = regexp.MustCompile(`@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)`)
-	re3d4d = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
-	reQ    = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
+	reAt     = regexp.MustCompile(`@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)`)
+	re3d4d   = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
+	reQ      = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
+	reSearch = regexp.MustCompile(`/maps/search/(-?\d+(?:\.\d+)?),[ +]?(-?\d+(?:\.\d+)?)`)
 )
 
 // ExpandAndExtractCoords expands a Google Maps short URL and extracts coordinates from the final URL.
@@ -73,7 +74,12 @@ func extractFromURL(s string) (lat, lng float64, ok bool) {
 		return parse2(m[1], m[2])
 	}
 
-	// Pattern C: query params like ?q=lat,lng or ?query=lat,lng
+	// Pattern C: /maps/search/lat,+lng
+	if m := reSearch.FindStringSubmatch(s); len(m) == 3 {
+		return parse2(m[1], m[2])
+	}
+
+	// Pattern D: query params like ?q=lat,lng or ?query=lat,lng
 	u, err := url.Parse(s)
 	if err == nil {
 		for _, key := range []string{"q", "query"} {
