@@ -59,6 +59,7 @@ type Guess struct {
 
 type GuessResult struct {
 	UserID         string
+	GuessURL       string
 	Score          int
 	DistanceMeters float64
 }
@@ -122,6 +123,7 @@ func (s *Service) GetActiveSession(ctx context.Context, channelID string) (*Sess
 }
 
 // AddGuess records a user's guess for the active session.
+// If the user has already guessed, it updates with the new guess.
 func (s *Service) AddGuess(ctx context.Context, channelID, userID string, guessLat, guessLng float64, guessURL string) error {
 	sess, err := s.GetActiveSession(ctx, channelID)
 	if err != nil {
@@ -131,17 +133,16 @@ func (s *Service) AddGuess(ctx context.Context, channelID, userID string, guessL
 	query := `
 		INSERT INTO guess_guesses (session_id, user_id, guess_lat, guess_lng, guess_url)
 		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (session_id, user_id) 
+		DO UPDATE SET guess_lat = EXCLUDED.guess_lat, 
+		              guess_lng = EXCLUDED.guess_lng, 
+		              guess_url = EXCLUDED.guess_url,
+		              score = NULL,
+		              distance_meters = NULL,
+		              created_at = CURRENT_TIMESTAMP
 	`
 	_, err = s.db.Exec(ctx, query, sess.ID, userID, guessLat, guessLng, guessURL)
-	if err != nil {
-		// Check for unique constraint violation
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return ErrAlreadyGuessed
-		}
-		return err
-	}
-	return nil
+	return err
 }
 
 // SetAnswer sets the correct answer for the active session and calculates scores.
@@ -164,7 +165,7 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 
 	// Get all guesses for this session
 	guessQuery := `
-		SELECT id, user_id, guess_lat, guess_lng
+		SELECT id, user_id, guess_lat, guess_lng, guess_url
 		FROM guess_guesses
 		WHERE session_id = $1
 		ORDER BY created_at ASC
@@ -180,7 +181,8 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 		var guessID int64
 		var userID string
 		var guessLat, guessLng float64
-		if err := rows.Scan(&guessID, &userID, &guessLat, &guessLng); err != nil {
+		var guessURL string
+		if err := rows.Scan(&guessID, &userID, &guessLat, &guessLng, &guessURL); err != nil {
 			return nil, err
 		}
 
@@ -201,6 +203,7 @@ func (s *Service) SetAnswer(ctx context.Context, channelID string, answerLat, an
 
 		results = append(results, GuessResult{
 			UserID:         userID,
+			GuessURL:       guessURL,
 			Score:          score,
 			DistanceMeters: distance,
 		})

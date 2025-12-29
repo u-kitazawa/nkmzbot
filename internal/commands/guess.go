@@ -85,10 +85,6 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 					Content: strPtr("このチャンネルにはアクティブなセッションがありません\n`/guess start` でセッションを開始してください"),
 				})
-			} else if err == guess.ErrAlreadyGuessed {
-				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-					Content: strPtr("既に推測を送信しています"),
-				})
 			} else {
 				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 					Content: strPtr("推測の記録に失敗しました: " + err.Error()),
@@ -97,7 +93,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 			return
 		}
 
-		msg := fmt.Sprintf("✅ <@%s> の推測を記録しました！\n座標: %.6f, %.6f", userID, lat, lng)
+		msg := fmt.Sprintf("✅ <@%s> の推測を記録しました！", userID)
 		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: &msg,
 		})
@@ -142,7 +138,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		}
 
 		if len(results) == 0 {
-			msg := fmt.Sprintf("📍 正解: %.6f, %.6f\n\nまだ誰も推測していません", lat, lng)
+			msg := fmt.Sprintf("📍 正解: %s\n\nまだ誰も推測していません", finalURL)
 			s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 				Content: &msg,
 			})
@@ -155,7 +151,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		})
 
 		var b strings.Builder
-		fmt.Fprintf(&b, "📍 **正解座標**: %.6f, %.6f\n\n", lat, lng)
+		fmt.Fprintf(&b, "📍 **正解**: %s\n\n", finalURL)
 		fmt.Fprintf(&b, "🏆 **結果** (%d名)\n", len(results))
 		fmt.Fprintf(&b, "```\n")
 		for idx, r := range results {
@@ -173,7 +169,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		fmt.Fprintf(&b, "```\n")
 		for idx, r := range results {
 			rank := idx + 1
-			fmt.Fprintf(&b, "%d. <@%s>: **%d点** (距離: %s)\n", rank, r.UserID, r.Score, guess.FormatDistance(r.DistanceMeters))
+			fmt.Fprintf(&b, "%d. <@%s>: **%d点** (距離: %s)\n   推測: %s\n", rank, r.UserID, r.Score, guess.FormatDistance(r.DistanceMeters), r.GuessURL)
 		}
 
 		msg := b.String()
