@@ -28,6 +28,8 @@ type activeTask struct {
 var (
 	activeTasks = make(map[int]*activeTask)
 	tasksMu     sync.Mutex
+	// JST timezone (UTC+9)
+	jst = time.FixedZone("JST", 9*60*60)
 )
 
 // RestoreScheduledTasks loads all scheduled tasks from the database and schedules them
@@ -164,7 +166,6 @@ func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, option
 	scheduleTask(s, svc, database, task)
 
 	// Display time in JST for user
-	jst := time.FixedZone("JST", 9*60*60)
 	jstTime := targetTime.In(jst)
 	msg := fmt.Sprintf("ID: %d\nコマンド `%s` を %s に実行するように予約しました", dbTask.ID, *cmdStr, jstTime.Format("2006-01-02 15:04"))
 	if isRepeat {
@@ -188,9 +189,6 @@ func handleJikanList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		respondText(s, i, "予約されているコマンドはありません")
 		return
 	}
-
-	// JST timezone for display
-	jst := time.FixedZone("JST", 9*60*60)
 
 	var b strings.Builder
 	b.WriteString("予約コマンド一覧:\n")
@@ -234,11 +232,11 @@ func handleJikanDelete(s *discordgo.Session, i *discordgo.InteractionCreate, opt
 		return
 	}
 
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-
 	// Check if task exists and belongs to this guild
+	tasksMu.Lock()
 	task, exists := activeTasks[taskID]
+	tasksMu.Unlock()
+
 	if !exists {
 		respondText(s, i, fmt.Sprintf("ID %d のタスクが見つかりません", taskID))
 		return
@@ -249,7 +247,7 @@ func handleJikanDelete(s *discordgo.Session, i *discordgo.InteractionCreate, opt
 		return
 	}
 
-	// Delete from database
+	// Delete from database (without holding the mutex)
 	ctx := context.Background()
 	if err := database.DeleteScheduledTask(ctx, taskID); err != nil {
 		respondText(s, i, fmt.Sprintf("タスクの削除に失敗しました: %v", err))
@@ -257,7 +255,9 @@ func handleJikanDelete(s *discordgo.Session, i *discordgo.InteractionCreate, opt
 	}
 
 	// Remove from memory
+	tasksMu.Lock()
 	delete(activeTasks, taskID)
+	tasksMu.Unlock()
 
 	respondText(s, i, fmt.Sprintf("タスク ID %d を削除しました", taskID))
 }
@@ -319,8 +319,6 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 }
 
 func parseTime(input string) (time.Time, error) {
-	// JST timezone (UTC+9)
-	jst := time.FixedZone("JST", 9*60*60)
 	now := time.Now().In(jst)
 	
 	// Try HH:MM format
