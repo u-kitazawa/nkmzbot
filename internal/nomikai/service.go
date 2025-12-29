@@ -208,6 +208,18 @@ func (s *Service) Status(ctx context.Context, channelID string) (string, error) 
 	for _, m := range members {
 		fmt.Fprintf(&b, "<@%s> weight=%.2f paid=%d\n", m.UserID, m.Weight, paidSum[m.UserID])
 	}
+
+	// Show current pending settlement tasks (reflects /nomikai seisan).
+	tasks, err := s.db.ListPendingSettlementTasks(ctx, ev.ID)
+	if err != nil {
+		return "エラー: 未払いタスク取得に失敗", err
+	}
+	if len(tasks) > 0 {
+		b.WriteString("\n未払いタスク:\n")
+		for _, t := range tasks {
+			fmt.Fprintf(&b, "<@%s> → <@%s>: %d 円\n", t.PayerID, t.PayeeID, t.Amount)
+		}
+	}
 	return b.String(), nil
 }
 
@@ -291,9 +303,29 @@ func (s *Service) Settle(ctx context.Context, channelID string) (*SettleResult, 
 			charges[uid] += share
 		}
 	}
-	var pos, neg []bal
+	// Base balance per user: positive means they should receive, negative means they should pay.
+	balance := make(map[string]float64, len(weights))
 	for uid := range weights {
-		net := paidSum[uid] - charges[uid]
+		balance[uid] = paidSum[uid] - charges[uid]
+	}
+
+	// Apply already-registered settlement payments (seisan) to balances.
+	// If A pays B, A's balance increases (less debt), B's balance decreases (less receivable).
+	paidRows, err := s.db.ListSettlementPaymentsSum(ctx, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, pr := range paidRows {
+		if _, ok := balance[pr.PayerID]; ok {
+			balance[pr.PayerID] += float64(pr.Amount)
+		}
+		if _, ok := balance[pr.PayeeID]; ok {
+			balance[pr.PayeeID] -= float64(pr.Amount)
+		}
+	}
+
+	var pos, neg []bal
+	for uid, net := range balance {
 		if net > 0 {
 			pos = append(pos, bal{uid: uid, net: net})
 		} else if net < 0 {
@@ -353,7 +385,15 @@ func (s *Service) ConfigureReminder(ctx context.Context, channelID string, inter
 		return "セッションが開始されていません", nil
 	}
 	if intervalMinutes <= 0 {
-		intervalMinutes = 1440
+		cfg, err := s.db.ReminderConfig(ctx, ev.ID)
+		if err != nil {
+			return "リマインド設定の取得に失敗しました", err
+		}
+		if cfg != nil && cfg.IntervalMinutes > 0 {
+			intervalMinutes = cfg.IntervalMinutes
+		} else {
+			intervalMinutes = 1440
+		}
 	}
 	if intervalMinutes < 1 {
 		intervalMinutes = 1
@@ -414,8 +454,9 @@ func (s *Service) ReminderMessageByEventID(ctx context.Context, eventID int64) (
 }
 
 // RegisterPayment records a settlement payment between payer and payee and updates tasks.
-func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string) (string, error) {
-	if amount <= 0 {
+// If payAll is true, amount is ignored and the full outstanding amount is used.
+func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payeeID string, amount int64, memo string, actorID string, payAll bool) (string, error) {
+	if !payAll && amount <= 0 {
 		return "金額は正の値で指定してください", nil
 	}
 
@@ -425,6 +466,23 @@ func (s *Service) RegisterPayment(ctx context.Context, channelID, payerID, payee
 	ev, err := s.db.ActiveEventByChannel(ctx, channelID)
 	if err != nil {
 		return "セッションが開始されていません", nil
+	}
+
+	if payAll {
+		paidAmount, err := s.db.RecordSettlementPaymentAll(ctx, ev.ID, payerID, payeeID, memo, actorID)
+		if err != nil {
+			return "支払いの登録に失敗しました", err
+		}
+		if paidAmount <= 0 {
+			return "未払いタスクがありません（先に /nomikai settle を実行してください）", nil
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "支払いを記録しました: <@%s> → <@%s> 未払い全額 %d 円", payerID, payeeID, paidAmount)
+		if memo != "" {
+			fmt.Fprintf(&b, " (%s)", memo)
+		}
+		b.WriteString("\nこのペアの未払いタスクは解消されました")
+		return b.String(), nil
 	}
 
 	remaining, err := s.db.RecordSettlementPayment(ctx, ev.ID, payerID, payeeID, amount, memo, actorID)

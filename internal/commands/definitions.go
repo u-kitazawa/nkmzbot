@@ -151,8 +151,8 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "pay",
-					Description: "自分の立替額を記録（負額も可）",
+					Name:        "tatekae",
+					Description: "立替（支出）を記録（負額も可）",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
 							Type:        discordgo.ApplicationCommandOptionInteger,
@@ -207,17 +207,21 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Required:    false,
 						},
 						{
-							Type:        discordgo.ApplicationCommandOptionBoolean,
-							Name:        "disable",
-							Description: "有効化ではなく停止する",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "state",
+							Description: "on/off (on=有効, off=停止)",
 							Required:    false,
+							Choices: []*discordgo.ApplicationCommandOptionChoice{
+								{Name: "on", Value: "on"},
+								{Name: "off", Value: "off"},
+							},
 						},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "paid",
-					Description: "実際の支払いを登録して未払いを減らす",
+					Name:        "seisan",
+					Description: "精算の支払いを登録して未払いを減らす",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
 							Type:        discordgo.ApplicationCommandOptionUser,
@@ -226,10 +230,11 @@ func GetCommands() []*discordgo.ApplicationCommand {
 							Required:    true,
 						},
 						{
-							Type:        discordgo.ApplicationCommandOptionInteger,
-							Name:        "amount",
-							Description: "支払った金額 (円)",
-							Required:    true,
+							Type:         discordgo.ApplicationCommandOptionString,
+							Name:         "amount",
+							Description:  "支払った金額 (円) / all=未払い全額",
+							Required:     true,
+							Autocomplete: true,
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionUser,
