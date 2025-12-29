@@ -4,6 +4,12 @@ import (
 	"math"
 )
 
+const (
+	// MinFiveKRadius is the minimum threshold for 5000-point radius in meters
+	// This prevents extremely small radii on tight maps
+	MinFiveKRadius = 25.0
+)
+
 // Haversine distance (meters) between two WGS84 lat/lng points (degrees).
 func DistanceMeters(lat1, lng1, lat2, lng2 float64) float64 {
 	const R = 6371008.8 // mean Earth radius (m)
@@ -29,8 +35,8 @@ func FiveKRadiusMeters(maxErrorDistanceMeters float64) float64 {
 	}
 	// r = ln(5000/4999.5) * maxErrorDistance / 10
 	r := math.Log(5000.0/4999.5) * maxErrorDistanceMeters / 10.0
-	if r < 25.0 {
-		r = 25.0
+	if r < MinFiveKRadius {
+		r = MinFiveKRadius
 	}
 	return r
 }

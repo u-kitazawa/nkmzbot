@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+const (
+	// RequestTimeout is the maximum time to wait for URL expansion
+	RequestTimeout = 15 * time.Second
+	// MaxRedirects is the maximum number of redirects to follow
+	MaxRedirects = 10
+)
+
 var (
 	reAt   = regexp.MustCompile(`@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)`)
 	re3d4d = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
@@ -19,10 +26,10 @@ var (
 // ExpandAndExtractCoords expands a Google Maps short URL and extracts coordinates from the final URL.
 func ExpandAndExtractCoords(input string) (lat float64, lng float64, finalURL string, err error) {
 	client := &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout: RequestTimeout,
 		// Follow redirects (default is fine); keep a safety cap.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
+			if len(via) >= MaxRedirects {
 				return errors.New("too many redirects")
 			}
 			return nil

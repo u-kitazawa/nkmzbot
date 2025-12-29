@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/geoscore"
 )
@@ -71,7 +72,8 @@ func (s *Service) StartSession(ctx context.Context, channelID string, guildID in
 	_, err := s.db.Exec(ctx, query, channelID, guildID, organizerID, DefaultMaxErrorDistance)
 	if err != nil {
 		// Check for unique constraint violation
-		if err.Error() == "ERROR: duplicate key value violates unique constraint \"uniq_guess_sessions_active_channel\" (SQLSTATE 23505)" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrSessionAlreadyExists
 		}
 		return err
@@ -133,7 +135,8 @@ func (s *Service) AddGuess(ctx context.Context, channelID, userID string, guessL
 	_, err = s.db.Exec(ctx, query, sess.ID, userID, guessLat, guessLng, guessURL)
 	if err != nil {
 		// Check for unique constraint violation
-		if err.Error() == "ERROR: duplicate key value violates unique constraint \"guess_guesses_session_id_user_id_key\" (SQLSTATE 23505)" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrAlreadyGuessed
 		}
 		return err
