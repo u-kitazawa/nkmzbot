@@ -17,7 +17,6 @@ var (
 	ErrSessionAlreadyExists = errors.New("このチャンネルには既にセッションが開始されています")
 	ErrNoActiveSession      = errors.New("このチャンネルにはアクティブなセッションがありません")
 	ErrAnswerNotSet         = errors.New("正解が設定されていません")
-	ErrAlreadyGuessed       = errors.New("既に推測を送信しています")
 )
 
 // World map default: half Earth circumference
@@ -134,12 +133,13 @@ func (s *Service) AddGuess(ctx context.Context, channelID, userID string, guessL
 		INSERT INTO guess_guesses (session_id, user_id, guess_lat, guess_lng, guess_url)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (session_id, user_id) 
-		DO UPDATE SET guess_lat = EXCLUDED.guess_lat, 
-		              guess_lng = EXCLUDED.guess_lng, 
-		              guess_url = EXCLUDED.guess_url,
-		              score = NULL,
-		              distance_meters = NULL,
-		              created_at = CURRENT_TIMESTAMP
+		DO UPDATE SET 
+			guess_lat = EXCLUDED.guess_lat, 
+			guess_lng = EXCLUDED.guess_lng, 
+			guess_url = EXCLUDED.guess_url,
+			score = NULL,
+			distance_meters = NULL,
+			created_at = CURRENT_TIMESTAMP
 	`
 	_, err = s.db.Exec(ctx, query, sess.ID, userID, guessLat, guessLng, guessURL)
 	return err
