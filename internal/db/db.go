@@ -33,6 +33,10 @@ func (db *DB) Close() {
 	db.pool.Close()
 }
 
+func (db *DB) Pool() *pgxpool.Pool {
+	return db.pool
+}
+
 // RunMigrations runs database migrations
 func (db *DB) RunMigrations(ctx context.Context) error {
 	// Load and execute all .sql files under ./migrations in lexical order
