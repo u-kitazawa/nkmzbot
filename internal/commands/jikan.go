@@ -28,6 +28,8 @@ type activeTask struct {
 var (
 	activeTasks = make(map[int]*activeTask)
 	tasksMu     sync.Mutex
+	// JST timezone (UTC+9)
+	jst = time.FixedZone("JST", 9*60*60)
 )
 
 // RestoreScheduledTasks loads all scheduled tasks from the database and schedules them
@@ -96,6 +98,8 @@ func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomi
 		handleJikanAdd(s, i, subCmd.Options, svc, database)
 	case "list":
 		handleJikanList(s, i)
+	case "delete":
+		handleJikanDelete(s, i, subCmd.Options, database)
 	}
 }
 
@@ -161,7 +165,9 @@ func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, option
 
 	scheduleTask(s, svc, database, task)
 
-	msg := fmt.Sprintf("ID: %d\nコマンド `%s` を %s に実行するように予約しました", dbTask.ID, *cmdStr, targetTime.Format("2006-01-02 15:04"))
+	// Display time in JST for user
+	jstTime := targetTime.In(jst)
+	msg := fmt.Sprintf("ID: %d\nコマンド `%s` を %s に実行するように予約しました", dbTask.ID, *cmdStr, jstTime.Format("2006-01-02 15:04"))
 	if isRepeat {
 		msg += "（毎日繰り返し）"
 	}
@@ -196,7 +202,9 @@ func handleJikanList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if t.Repeat {
 			repeatStr = " (毎日)"
 		}
-		fmt.Fprintf(&b, "- ID: %d | %s | `%s`%s\n", t.ID, t.Time.Format("2006-01-02 15:04"), t.Command, repeatStr)
+		// Display time in JST
+		jstTime := t.Time.In(jst)
+		fmt.Fprintf(&b, "- ID: %d | %s | `%s`%s\n", t.ID, jstTime.Format("2006-01-02 15:04"), t.Command, repeatStr)
 	}
 
 	if b.Len() == len("予約コマンド一覧:\n") {
@@ -205,6 +213,63 @@ func handleJikanList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	respondText(s, i, b.String())
+}
+
+func handleJikanDelete(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption, database *db.DB) {
+	taskIDOpt := getIntegerOption(options, "id")
+
+	if taskIDOpt == nil {
+		respondText(s, i, "タスクIDを指定してください")
+		return
+	}
+
+	taskID := int(*taskIDOpt)
+
+	// Parse guildID to int64
+	gid, err := strconv.ParseInt(i.GuildID, 10, 64)
+	if err != nil {
+		respondText(s, i, "ギルドIDの解析に失敗しました")
+		return
+	}
+
+	// Check if task exists and belongs to this guild
+	tasksMu.Lock()
+	task, exists := activeTasks[taskID]
+	tasksMu.Unlock()
+
+	if !exists {
+		respondText(s, i, fmt.Sprintf("ID %d のタスクが見つかりません", taskID))
+		return
+	}
+
+	if task.GuildID != gid {
+		respondText(s, i, "このサーバーのタスクではありません")
+		return
+	}
+
+	// Delete from database (without holding the mutex)
+	ctx := context.Background()
+	if err := database.DeleteScheduledTask(ctx, taskID); err != nil {
+		respondText(s, i, fmt.Sprintf("タスクの削除に失敗しました: %v", err))
+		return
+	}
+
+	// Remove from memory
+	tasksMu.Lock()
+	delete(activeTasks, taskID)
+	tasksMu.Unlock()
+
+	respondText(s, i, fmt.Sprintf("タスク ID %d を削除しました", taskID))
+}
+
+func getIntegerOption(opts []*discordgo.ApplicationCommandInteractionDataOption, name string) *int64 {
+	for _, o := range opts {
+		if o.Name == name {
+			v := o.IntValue()
+			return &v
+		}
+	}
+	return nil
 }
 
 func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, task *activeTask) {
@@ -254,20 +319,22 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 }
 
 func parseTime(input string) (time.Time, error) {
-	now := time.Now()
+	now := time.Now().In(jst)
 	
 	// Try HH:MM format
-	if t, err := time.ParseInLocation("15:04", input, time.Local); err == nil {
-		target := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
+	if t, err := time.ParseInLocation("15:04", input, jst); err == nil {
+		target := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, jst)
 		if target.Before(now) {
 			target = target.Add(24 * time.Hour)
 		}
-		return target, nil
+		// Convert to UTC before returning
+		return target.UTC(), nil
 	}
 
 	// Try YYYY-MM-DD HH:MM format
-	if t, err := time.ParseInLocation("2006-01-02 15:04", input, time.Local); err == nil {
-		return t, nil
+	if t, err := time.ParseInLocation("2006-01-02 15:04", input, jst); err == nil {
+		// Convert to UTC before returning
+		return t.UTC(), nil
 	}
 
 	return time.Time{}, fmt.Errorf("unsupported format")
