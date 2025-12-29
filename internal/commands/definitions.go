@@ -90,6 +90,19 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Name:        "list",
 					Description: "予約されているコマンド一覧を表示します",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "delete",
+					Description: "予約されているコマンドを削除します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "id",
+							Description: "削除するタスクのID",
+							Required:    true,
+						},
+					},
+				},
 			},
 		},
 		{
