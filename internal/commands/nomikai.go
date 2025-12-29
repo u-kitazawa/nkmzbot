@@ -110,7 +110,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			}
 			respondText(s, i, msg)
 		}
-	case "pay":
+	case "tatekae":
 		amtOpt := getIntOption(sub.Options, "amount")
 		memoOpt := getStringOption(sub.Options, "memo")
 		forOpt := getStringOption(sub.Options, "for")
@@ -202,7 +202,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		respondText(s, i, b.String())
 	case "remind":
-		intervalMinutes := 1440
+		intervalMinutes := 0
 		if opt := getStringOption(sub.Options, "interval"); opt != nil {
 			mins, err := parseDHMToMinutes(*opt)
 			if err != nil {
@@ -212,8 +212,21 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			intervalMinutes = mins
 		}
 		disable := false
-		if opt := getBoolOption(sub.Options, "disable"); opt != nil {
-			disable = *opt
+		if opt := getStringOption(sub.Options, "state"); opt != nil {
+			state := strings.ToLower(strings.TrimSpace(*opt))
+			switch state {
+			case "on", "enable":
+				disable = false
+			case "off", "disable":
+				disable = true
+			case "オン":
+				disable = false
+			case "オフ":
+				disable = true
+			default:
+				respondText(s, i, "state は on/off で指定してください")
+				return
+			}
 		}
 		msg, err := svc.ConfigureReminder(context.Background(), channelID, intervalMinutes, disable, true)
 		if err != nil {
@@ -221,10 +234,10 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			return
 		}
 		respondText(s, i, msg)
-	case "paid":
-		amtOpt := getIntOption(sub.Options, "amount")
-		if amtOpt == nil || *amtOpt <= 0 {
-			respondText(s, i, "amount は正の数で指定してください")
+	case "seisan":
+		amtStrOpt := getStringOption(sub.Options, "amount")
+		if amtStrOpt == nil {
+			respondText(s, i, "amount の指定が必要です")
 			return
 		}
 		payee := getUserID(data, sub, "to")
@@ -240,7 +253,23 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		if opt := getStringOption(sub.Options, "memo"); opt != nil {
 			memo = *opt
 		}
-		msg, err := svc.RegisterPayment(context.Background(), channelID, payer, payee, *amtOpt, memo, userID)
+
+		amountStr := strings.TrimSpace(*amtStrOpt)
+		payAll := false
+		amount := int64(0)
+		switch strings.ToLower(amountStr) {
+		case "all", "zenbu", "全部", "全額":
+			payAll = true
+		default:
+			v, err := strconv.ParseInt(amountStr, 10, 64)
+			if err != nil || v <= 0 {
+				respondText(s, i, "amount は正の数、または all を指定してください")
+				return
+			}
+			amount = v
+		}
+
+		msg, err := svc.RegisterPayment(context.Background(), channelID, payer, payee, amount, memo, userID, payAll)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
