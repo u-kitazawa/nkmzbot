@@ -211,6 +211,49 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:         "guess",
+			Description:  "ジオゲッサーを開始・プレイします",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "start",
+					Description: "このチャンネルでジオゲッサーセッションを開始",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "stop",
+					Description: "このチャンネルのセッションを終了",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "guess",
+					Description: "推測を送信",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "url",
+							Description: "Google Mapsの短縮URL",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "answer",
+					Description: "正解を発表してスコアを表示",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "url",
+							Description: "正解のGoogle Maps URL",
+							Required:    true,
+						},
+					},
+				},
+			},
+		},
+		{
 			Name: "Register as Response",
 			Type: discordgo.MessageApplicationCommand,
 		},

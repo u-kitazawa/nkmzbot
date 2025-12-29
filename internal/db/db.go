@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,6 +33,21 @@ func New(ctx context.Context, databaseURL string) (*DB, error) {
 
 func (db *DB) Close() {
 	db.pool.Close()
+}
+
+// Exec executes a query without returning any rows.
+func (db *DB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return db.pool.Exec(ctx, sql, args...)
+}
+
+// Query executes a query that returns rows.
+func (db *DB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return db.pool.Query(ctx, sql, args...)
+}
+
+// QueryRow executes a query that is expected to return at most one row.
+func (db *DB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return db.pool.QueryRow(ctx, sql, args...)
 }
 
 // RunMigrations runs database migrations
