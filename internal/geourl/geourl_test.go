@@ -41,6 +41,20 @@ func TestExtractFromURL(t *testing.T) {
 			wantOk:  true,
 		},
 		{
+			name:    "Pattern C: /maps/search/lat,lng with space separator",
+			url:     "https://www.google.com/maps/search/35.696677, 138.430228",
+			wantLat: 35.696677,
+			wantLng: 138.430228,
+			wantOk:  true,
+		},
+		{
+			name:    "Pattern C: /maps/search/lat,lng with negative longitude",
+			url:     "https://www.google.com/maps/search/35.696677,-138.430228",
+			wantLat: 35.696677,
+			wantLng: -138.430228,
+			wantOk:  true,
+		},
+		{
 			name:    "Pattern D: query param ?q=lat,lng",
 			url:     "https://www.google.com/maps?q=35.696677,138.430228",
 			wantLat: 35.696677,

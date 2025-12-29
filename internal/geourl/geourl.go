@@ -21,7 +21,7 @@ var (
 	reAt     = regexp.MustCompile(`@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)`)
 	re3d4d   = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
 	reQ      = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
-	reSearch = regexp.MustCompile(`/maps/search/(-?\d+(?:\.\d+)?),\+?(-?\d+(?:\.\d+)?)`)
+	reSearch = regexp.MustCompile(`/maps/search/(-?\d+(?:\.\d+)?),[\+\s]*(-?\d+(?:\.\d+)?)`)
 )
 
 // ExpandAndExtractCoords expands a Google Maps short URL and extracts coordinates from the final URL.
