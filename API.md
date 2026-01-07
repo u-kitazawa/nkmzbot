@@ -2,26 +2,13 @@
 
 ## Overview
 
-The nkmzbot API is a RESTful API that allows you to manage Discord bot commands through HTTP requests. All endpoints return JSON responses.
-
-## Web Interface
-
-The bot includes a web interface for viewing and managing commands:
-- `http://localhost:3000/` - Main page where you can enter a Guild ID
-- `http://localhost:3000/guilds/{guild_id}` - View all commands for a specific guild
-- `http://localhost:3000/login` - Authentication page for Discord OAuth2 login
-
-The web interface for viewing commands does not require authentication and is publicly accessible. To manage commands (add, edit, delete), use the login page to authenticate with your Discord account.
+The nkmzbot API is a RESTful API that allows you to manage Discord bot commands through HTTP requests. All endpoints return JSON responses. **All command data endpoints require authentication.**
 
 ## Authentication
 
-Most management endpoints require authentication. The API uses JWT tokens obtained through Discord OAuth2. Public read-only endpoints do not require authentication.
+All endpoints require authentication via Discord OAuth2. The API uses JWT tokens that are stored in HTTP-only cookies for security.
 
-### Web-based Login (Recommended)
-
-Visit `http://localhost:3000/login` and click the "Discord でログイン" button. After authenticating with Discord, you will receive a JWT token that you can use with the API.
-
-### API-based Login
+### Authentication Flow
 
 1. **Get the OAuth2 URL**
 ```bash
@@ -39,36 +26,13 @@ Response:
 2. **Complete OAuth2 flow**
    - Direct the user to the `auth_url`
    - Discord will redirect back to your `DISCORD_REDIRECT_URI` with a code
-   - The callback endpoint will return a JWT token
+   - The callback endpoint will set a JWT token in an HTTP-only cookie
 
-3. **Use the token**
-   - Include the token in the `Authorization` header as `Bearer <token>`
+3. **Use the authentication**
+   - The JWT token is automatically sent via cookie in subsequent requests
+   - Alternatively, include the token in the `Authorization` header as `Bearer <token>`
 
 ## Endpoints
-
-### Public Endpoints
-
-#### GET /api/public/guilds/{guild_id}/commands
-List all commands for a specific guild (no authentication required).
-
-**Query Parameters:**
-- `q` (optional): Search keyword to filter commands
-
-**Response:**
-```json
-[
-  {
-    "guild_id": 123456789,
-    "name": "hello",
-    "response": "Hello, world!"
-  }
-]
-```
-
-**Example:**
-```bash
-curl "http://localhost:3000/api/public/guilds/123456789/commands?q=hello"
-```
 
 ### Authentication
 

@@ -92,24 +92,40 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, _, _, err := a.authenticateUser(code)
 	if err != nil {
-		// Redirect to login page with error
-		errorType := "authentication_failed"
-		if strings.Contains(err.Error(), "token exchange") {
-			errorType = "token_exchange_failed"
-		} else if strings.Contains(err.Error(), "failed to get user") {
-			errorType = "failed_to_get_user"
-		} else if strings.Contains(err.Error(), "failed to create token") {
-			errorType = "failed_to_create_token"
-		}
-		http.Redirect(w, r, "/login?error="+errorType, http.StatusSeeOther)
+		http.Error(w, fmt.Sprintf("Authentication failed: %v", err), http.StatusBadGateway)
 		return
 	}
 
-	// Redirect to login page with token in URL fragment
-	http.Redirect(w, r, "/login?success=true#token="+tokenString, http.StatusSeeOther)
+	// Set HTTP-only cookie with the JWT token
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    tokenString,
+		Path:     "/",
+		MaxAge:   86400, // 24 hours in seconds
+		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Return success message
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Authentication successful. Token has been set in cookie.",
+	})
 }
 
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Clear the auth cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1, // Delete cookie
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "logged out",
@@ -119,16 +135,24 @@ func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 // Middleware
 func (a *API) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
-			return
-		}
+		var tokenString string
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			http.Error(w, "invalid authorization header", http.StatusUnauthorized)
-			return
+		// First, try to get token from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			if tokenString == authHeader {
+				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
+				return
+			}
+		} else {
+			// If no Authorization header, try to get token from cookie
+			cookie, err := r.Cookie("auth_token")
+			if err != nil {
+				http.Error(w, "missing authentication", http.StatusUnauthorized)
+				return
+			}
+			tokenString = cookie.Value
 		}
 
 		claims := &Claims{}
