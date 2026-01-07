@@ -109,6 +109,13 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			Name:         "list",
 			Description:  "登録されているコマンド一覧を表示します",
 			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "web",
+					Description: "WebUIのURLを表示します",
+				},
+			},
 		},
 		{
 			Name:         "nomikai",

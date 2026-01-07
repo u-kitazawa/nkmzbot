@@ -10,6 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/commands"
+	"github.com/susu3304/nkmzbot/internal/config"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/guess"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
@@ -21,9 +22,10 @@ type Bot struct {
 	nomikai  *nomikai.Service
 	guess    *guess.Service
 	reminder *reminderWorker
+	config   *config.Config
 }
 
-func New(token string, database *db.DB) (*Bot, error) {
+func New(token string, database *db.DB, cfg *config.Config) (*Bot, error) {
 	session, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
@@ -54,6 +56,7 @@ func New(token string, database *db.DB) (*Bot, error) {
 		db:      database,
 		nomikai: nomikai.NewService(database),
 		guess:   guess.NewService(database),
+		config:  cfg,
 	}
 	bot.reminder = newReminderWorker(session, database, bot.nomikai)
 
