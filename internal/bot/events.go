@@ -158,7 +158,7 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 	case "update":
 		commands.HandleUpdate(s, i, b.db)
 	case "list":
-		commands.HandleList(s, i, b.db)
+		commands.HandleList(s, i, b.db, b.config)
 	case "nomikai":
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "guess":

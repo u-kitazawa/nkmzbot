@@ -33,7 +33,7 @@ func main() {
 	}
 
 	// Initialize Discord bot
-	discordBot, err := bot.New(cfg.DiscordToken, database)
+	discordBot, err := bot.New(cfg.DiscordToken, database, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create discord bot: %v", err)
 	}

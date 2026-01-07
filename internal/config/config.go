@@ -20,7 +20,8 @@ type Config struct {
 	DatabaseURL string
 
 	// Web Server
-	WebBind string
+	WebBind       string
+	WebUIBaseURL  string
 
 	// Session
 	JWTSecret string
@@ -39,6 +40,9 @@ func Load() (*Config, error) {
 		DiscordRedirectURI:  getEnvDefault("DISCORD_REDIRECT_URI", "http://localhost:3000/api/auth/callback"),
 		JWTSecret:           getEnvDefault("JWT_SECRET", "dev-only-change-me"),
 	}
+
+	// Extract base URL from redirect URI
+	cfg.WebUIBaseURL = extractBaseURL(cfg.DiscordRedirectURI)
 
 	if cfg.DiscordToken == "" {
 		return nil, fmt.Errorf("DISCORD_TOKEN is required")
@@ -61,4 +65,37 @@ func getEnvDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func extractBaseURL(redirectURI string) string {
+	// Extract base URL from redirect URI (e.g., "http://localhost:3000/api/auth/callback" -> "http://localhost:3000")
+	// Find the third slash after the protocol
+	if len(redirectURI) < 8 {
+		return "http://localhost:3000"
+	}
+	
+	// Find protocol end
+	protocolEnd := 0
+	if redirectURI[0:7] == "http://" {
+		protocolEnd = 7
+	} else if len(redirectURI) > 8 && redirectURI[0:8] == "https://" {
+		protocolEnd = 8
+	} else {
+		return "http://localhost:3000"
+	}
+	
+	// Find first slash after protocol
+	firstSlash := -1
+	for i := protocolEnd; i < len(redirectURI); i++ {
+		if redirectURI[i] == '/' {
+			firstSlash = i
+			break
+		}
+	}
+	
+	if firstSlash == -1 {
+		return redirectURI
+	}
+	
+	return redirectURI[:firstSlash]
 }
