@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -34,7 +35,7 @@ func TestHandleWebInterface(t *testing.T) {
 	}
 	
 	for _, expected := range expectedStrings {
-		if !contains(body, expected) {
+		if !strings.Contains(body, expected) {
 			t.Errorf("Expected response to contain '%s'", expected)
 		}
 	}
@@ -52,17 +53,4 @@ func TestHandleWebInterfaceWithGuildId(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status OK, got %v", resp.StatusCode)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[:len(s)] != "" && findSubstring(s, substr)
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
