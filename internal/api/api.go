@@ -47,6 +47,13 @@ func (a *API) setupRoutes() {
 	a.router.HandleFunc("/api/auth/callback", a.handleCallback).Methods("GET")
 	a.router.HandleFunc("/api/auth/logout", a.handleLogout).Methods("POST")
 
+	// Public endpoints
+	a.router.HandleFunc("/api/public/guilds/{guild_id}/commands", a.handlePublicListCommands).Methods("GET")
+	
+	// Web interface
+	a.router.HandleFunc("/", a.handleWebInterface).Methods("GET")
+	a.router.HandleFunc("/guilds/{guild_id}", a.handleWebInterface).Methods("GET")
+
 	// Protected endpoints
 	protected := a.router.PathPrefix("/api").Subrouter()
 	protected.Use(a.authMiddleware)

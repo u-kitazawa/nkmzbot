@@ -17,6 +17,15 @@ Discord bot with REST API for managing custom commands.
 - `.env` などで上記環境変数を設定
 - `go run cmd/nkmzbot/main.go` で Bot と API サーバーの両方が起動します
 - API は `http://localhost:3000/api` でアクセス可能
+- Web インターフェース: `http://localhost:3000/guilds/{guild_id}` でコマンド一覧を表示
+
+## Web インターフェース
+
+コマンドの内容を Web ブラウザで表示できます:
+- `http://localhost:3000/` - トップページ（Guild ID を入力してコマンド一覧を表示）
+- `http://localhost:3000/guilds/{guild_id}` - 特定のギルドのコマンド一覧を表示
+
+認証不要で誰でも閲覧できます。
 
 ## API エンドポイント
 
@@ -24,6 +33,10 @@ Discord bot with REST API for managing custom commands.
 - `GET /api/auth/login` - OAuth2 ログイン URL を取得
 - `GET /api/auth/callback` - OAuth2 コールバック (JWT トークンを返す)
 - `POST /api/auth/logout` - ログアウト
+
+### 公開エンドポイント
+- `GET /api/public/guilds/{guild_id}/commands` - コマンド一覧を取得（認証不要）
+  - クエリパラメータ: `q` (検索キーワード)
 
 ### ギルド管理
 - `GET /api/user/guilds` - ユーザーが参加しているギルド一覧を取得 (認証必要)
