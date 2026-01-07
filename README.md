@@ -24,8 +24,10 @@ Discord bot with REST API for managing custom commands.
 コマンドの内容を Web ブラウザで表示できます:
 - `http://localhost:3000/` - トップページ（Guild ID を入力してコマンド一覧を表示）
 - `http://localhost:3000/guilds/{guild_id}` - 特定のギルドのコマンド一覧を表示
+- `http://localhost:3000/login` - 認証ログインページ（Discord OAuth2）
 
-認証不要で誰でも閲覧できます。
+コマンドの閲覧は認証不要で誰でも可能です。
+コマンドの追加・編集・削除を行う場合は、ログインページから Discord アカウントで認証してください。
 
 ## API エンドポイント
 

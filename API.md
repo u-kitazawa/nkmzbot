@@ -6,17 +6,22 @@ The nkmzbot API is a RESTful API that allows you to manage Discord bot commands 
 
 ## Web Interface
 
-The bot includes a web interface for viewing commands:
+The bot includes a web interface for viewing and managing commands:
 - `http://localhost:3000/` - Main page where you can enter a Guild ID
 - `http://localhost:3000/guilds/{guild_id}` - View all commands for a specific guild
+- `http://localhost:3000/login` - Authentication page for Discord OAuth2 login
 
-The web interface does not require authentication and is publicly accessible.
+The web interface for viewing commands does not require authentication and is publicly accessible. To manage commands (add, edit, delete), use the login page to authenticate with your Discord account.
 
 ## Authentication
 
 Most management endpoints require authentication. The API uses JWT tokens obtained through Discord OAuth2. Public read-only endpoints do not require authentication.
 
-### Getting a Token
+### Web-based Login (Recommended)
+
+Visit `http://localhost:3000/login` and click the "Discord でログイン" button. After authenticating with Discord, you will receive a JWT token that you can use with the API.
+
+### API-based Login
 
 1. **Get the OAuth2 URL**
 ```bash

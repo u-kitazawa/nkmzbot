@@ -54,3 +54,38 @@ func TestHandleWebInterfaceWithGuildId(t *testing.T) {
 		t.Errorf("Expected status OK, got %v", resp.StatusCode)
 	}
 }
+
+func TestHandleLoginPage(t *testing.T) {
+	api := &API{}
+	
+	req := httptest.NewRequest("GET", "/login", nil)
+	w := httptest.NewRecorder()
+	
+	api.handleLoginPage(w, req)
+	
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK, got %v", resp.StatusCode)
+	}
+	
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "text/html; charset=utf-8" {
+		t.Errorf("Expected Content-Type text/html; charset=utf-8, got %v", contentType)
+	}
+	
+	// Check that the response contains key elements
+	body := w.Body.String()
+	expectedStrings := []string{
+		"<!DOCTYPE html>",
+		"nkmzbot",
+		"ログイン",
+		"Discord でログイン",
+		"/api/auth/login",
+	}
+	
+	for _, expected := range expectedStrings {
+		if !strings.Contains(body, expected) {
+			t.Errorf("Expected response to contain '%s'", expected)
+		}
+	}
+}

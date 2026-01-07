@@ -76,6 +76,49 @@ func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	// Exchange code for token
+	token, err := a.oauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=token_exchange_failed", http.StatusSeeOther)
+		return
+	}
+
+	// Get user info
+	user, err := a.getDiscordUser(token.AccessToken)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=failed_to_get_user", http.StatusSeeOther)
+		return
+	}
+
+	// Create JWT
+	claims := &Claims{
+		UserID:      user.ID,
+		Username:    user.Username,
+		AccessToken: token.AccessToken,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := jwtToken.SignedString(a.jwtSecret)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=failed_to_create_token", http.StatusSeeOther)
+		return
+	}
+
+	// Redirect to login page with token in URL fragment
+	http.Redirect(w, r, "/login?success=true#token="+tokenString, http.StatusSeeOther)
+}
+
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
