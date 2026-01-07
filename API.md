@@ -2,13 +2,13 @@
 
 ## Overview
 
-The nkmzbot API is a RESTful API that allows you to manage Discord bot commands through HTTP requests. All endpoints return JSON responses.
+The nkmzbot API is a RESTful API that allows you to manage Discord bot commands through HTTP requests. All endpoints return JSON responses. **All command data endpoints require authentication.**
 
 ## Authentication
 
-Most endpoints require authentication. The API uses JWT tokens obtained through Discord OAuth2.
+All endpoints require authentication via Discord OAuth2. The API uses JWT tokens that are stored in HTTP-only cookies for security.
 
-### Getting a Token
+### Authentication Flow
 
 1. **Get the OAuth2 URL**
 ```bash
@@ -26,10 +26,11 @@ Response:
 2. **Complete OAuth2 flow**
    - Direct the user to the `auth_url`
    - Discord will redirect back to your `DISCORD_REDIRECT_URI` with a code
-   - The callback endpoint will return a JWT token
+   - The callback endpoint will set a JWT token in an HTTP-only cookie
 
-3. **Use the token**
-   - Include the token in the `Authorization` header as `Bearer <token>`
+3. **Use the authentication**
+   - The JWT token is automatically sent via cookie in subsequent requests
+   - Alternatively, include the token in the `Authorization` header as `Bearer <token>`
 
 ## Endpoints
 

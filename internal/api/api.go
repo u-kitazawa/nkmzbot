@@ -44,10 +44,14 @@ func New(cfg *config.Config, database *db.DB) *API {
 func (a *API) setupRoutes() {
 	// Auth endpoints
 	a.router.HandleFunc("/api/auth/login", a.handleLogin).Methods("GET")
-	a.router.HandleFunc("/api/auth/callback", a.handleCallback).Methods("GET")
+	a.router.HandleFunc("/api/auth/callback", a.handleAuthCallback).Methods("GET")
 	a.router.HandleFunc("/api/auth/logout", a.handleLogout).Methods("POST")
 
-	// Protected endpoints
+	// Web interface pages (login page is public, command list requires auth via cookie)
+	a.router.HandleFunc("/login", a.handleLoginPage).Methods("GET")
+	a.router.HandleFunc("/guilds/{guild_id}", a.handleCommandListPage).Methods("GET")
+
+	// Protected endpoints - all endpoints require authentication
 	protected := a.router.PathPrefix("/api").Subrouter()
 	protected.Use(a.authMiddleware)
 

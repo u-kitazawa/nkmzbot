@@ -29,25 +29,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		http.Error(w, "missing code", http.StatusBadRequest)
-		return
-	}
-
+func (a *API) authenticateUser(code string) (string, string, string, error) {
 	// Exchange code for token
 	token, err := a.oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("token exchange failed: %v", err), http.StatusBadGateway)
-		return
+		return "", "", "", fmt.Errorf("token exchange failed: %w", err)
 	}
 
 	// Get user info
 	user, err := a.getDiscordUser(token.AccessToken)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get user: %v", err), http.StatusBadGateway)
-		return
+		return "", "", "", fmt.Errorf("failed to get user: %w", err)
 	}
 
 	// Create JWT
@@ -64,19 +56,76 @@ func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := jwtToken.SignedString(a.jwtSecret)
 	if err != nil {
-		http.Error(w, "failed to create token", http.StatusInternalServerError)
+		return "", "", "", fmt.Errorf("failed to create token: %w", err)
+	}
+
+	return tokenString, user.ID, getUsername(user), nil
+}
+
+func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	tokenString, userID, username, err := a.authenticateUser(code)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"token":    tokenString,
-		"user_id":  user.ID,
-		"username": getUsername(user),
+		"user_id":  userID,
+		"username": username,
 	})
 }
 
+func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	tokenString, _, _, err := a.authenticateUser(code)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=auth_failed", http.StatusSeeOther)
+		return
+	}
+
+	// Set HTTP-only cookie with the JWT token
+	// NOTE: Secure flag is set to false for local development
+	// In production with HTTPS, this should be set to true
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    tokenString,
+		Path:     "/",
+		MaxAge:   86400, // 24 hours in seconds
+		HttpOnly: true,
+		Secure:   false, // TODO: Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Redirect to user guilds selection page (we'll use /login with success param for now)
+	http.Redirect(w, r, "/login?success=true", http.StatusSeeOther)
+}
+
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Clear the auth cookie
+	// NOTE: Secure flag should match the one set during login
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1, // Delete cookie
+		HttpOnly: true,
+		Secure:   false, // TODO: Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "logged out",
@@ -86,16 +135,24 @@ func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 // Middleware
 func (a *API) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
-			return
-		}
+		var tokenString string
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			http.Error(w, "invalid authorization header", http.StatusUnauthorized)
-			return
+		// First, try to get token from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			if tokenString == authHeader {
+				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
+				return
+			}
+		} else {
+			// If no Authorization header, try to get token from cookie
+			cookie, err := r.Cookie("auth_token")
+			if err != nil {
+				http.Error(w, "missing authentication", http.StatusUnauthorized)
+				return
+			}
+			tokenString = cookie.Value
 		}
 
 		claims := &Claims{}
