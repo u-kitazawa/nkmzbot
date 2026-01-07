@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -68,34 +69,12 @@ func getEnvDefault(key, defaultValue string) string {
 }
 
 func extractBaseURL(redirectURI string) string {
-	// Extract base URL from redirect URI (e.g., "http://localhost:3000/api/auth/callback" -> "http://localhost:3000")
-	// Find the third slash after the protocol
-	if len(redirectURI) < 8 {
+	// Extract base URL from redirect URI using url.Parse
+	// e.g., "http://localhost:3000/api/auth/callback" -> "http://localhost:3000"
+	parsed, err := url.Parse(redirectURI)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "http://localhost:3000"
 	}
 	
-	// Find protocol end
-	protocolEnd := 0
-	if redirectURI[0:7] == "http://" {
-		protocolEnd = 7
-	} else if len(redirectURI) > 8 && redirectURI[0:8] == "https://" {
-		protocolEnd = 8
-	} else {
-		return "http://localhost:3000"
-	}
-	
-	// Find first slash after protocol
-	firstSlash := -1
-	for i := protocolEnd; i < len(redirectURI); i++ {
-		if redirectURI[i] == '/' {
-			firstSlash = i
-			break
-		}
-	}
-	
-	if firstSlash == -1 {
-		return redirectURI
-	}
-	
-	return redirectURI[:firstSlash]
+	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 }
