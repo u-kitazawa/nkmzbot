@@ -75,6 +75,6 @@ func extractBaseURL(redirectURI string) string {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "http://localhost:3000"
 	}
-	
+
 	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 }
