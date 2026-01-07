@@ -17,13 +17,33 @@ Discord bot with REST API for managing custom commands.
 - `.env` などで上記環境変数を設定
 - `go run cmd/nkmzbot/main.go` で Bot と API サーバーの両方が起動します
 - API は `http://localhost:3000/api` でアクセス可能
+- Web インターフェース: `http://localhost:3000/login`
 
-## 認証方法
+## Web インターフェース
+
+### ログイン画面
+`http://localhost:3000/login` にアクセスして Discord でログイン
+- Discord OAuth2 による認証
+- ログイン後、参加しているギルド一覧が表示されます
+
+### コマンド一覧画面
+`http://localhost:3000/guilds/{guild_id}` でコマンド一覧を表示
+- 認証が必要（自動的にクッキーで認証）
+- コマンドの検索機能
+- Guild ID はパスパラメータで指定
 
 すべてのコマンドデータの取得には認証が必要です。
 
-### OAuth2 認証フロー
+## 認証方法
 
+### Web ブラウザ経由（推奨）
+1. `http://localhost:3000/login` にアクセス
+2. Discord でログインボタンをクリック
+3. Discord の認証画面で許可
+4. 自動的にログインページに戻り、ギルド一覧が表示される
+5. ギルドを選択してコマンド一覧を表示
+
+### API 経由
 1. `/api/auth/login` にアクセスして認証URLを取得
 2. DiscordのOAuth2認証を完了
 3. `/api/auth/callback` でJWTトークンがHTTP-Onlyクッキーに保存される

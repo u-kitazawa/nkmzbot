@@ -92,7 +92,7 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, _, _, err := a.authenticateUser(code)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Authentication failed: %v", err), http.StatusBadGateway)
+		http.Redirect(w, r, "/login?error=auth_failed", http.StatusSeeOther)
 		return
 	}
 
@@ -109,11 +109,8 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Return success message
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Authentication successful. Token has been set in cookie.",
-	})
+	// Redirect to user guilds selection page (we'll use /login with success param for now)
+	http.Redirect(w, r, "/login?success=true", http.StatusSeeOther)
 }
 
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
