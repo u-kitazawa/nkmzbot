@@ -97,13 +97,15 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set HTTP-only cookie with the JWT token
+	// NOTE: Secure flag is set to false for local development
+	// In production with HTTPS, this should be set to true
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    tokenString,
 		Path:     "/",
 		MaxAge:   86400, // 24 hours in seconds
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   false, // TODO: Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -116,13 +118,14 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// Clear the auth cookie
+	// NOTE: Secure flag should match the one set during login
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1, // Delete cookie
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   false, // TODO: Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
 	})
 

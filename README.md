@@ -68,6 +68,11 @@ JWT_SECRET=$(openssl rand -hex 32) \
 go run cmd/nkmzbot/main.go
 ```
 
+## 本番環境での注意事項
+
+- HTTPSを使用する本番環境では、`internal/api/auth.go` のクッキー設定で `Secure: true` に変更してください
+- CORS設定を環境に合わせて調整してください (`internal/api/api.go`)
+
 ## ビルド
 
 ```bash
