@@ -682,7 +682,7 @@ func (a *API) handleLoginPage(w http.ResponseWriter, r *http.Request) {
             navigator.clipboard.writeText(token).then(() => {
                 alert('トークンをコピーしました！');
             }).catch(() => {
-                alert('コピーに失敗しました');
+                alert('トークンのコピーに失敗しました。手動でコピーしてください。');
             });
         }
 
@@ -713,9 +713,17 @@ func (a *API) handleLoginPage(w http.ResponseWriter, r *http.Request) {
                     '<button class="copy-btn" onclick="copyToken()">トークンをコピー</button>' +
                     '<p style="margin-top: 15px; color: #666; font-size: 0.9rem;">' +
                     'このトークンを Authorization ヘッダーに「Bearer ' + token.substring(0, 20) + '...」として設定してください。' +
+                    '</p>' +
+                    '<p style="margin-top: 10px; color: #f44336; font-size: 0.85rem;">' +
+                    '⚠️ セキュリティ上の注意: このトークンは他者に共有しないでください。トークンは24時間で期限切れになります。' +
                     '</p>';
                 
                 document.getElementById('loginBtn').style.display = 'none';
+                
+                // Clear the token from URL after displaying (for security)
+                setTimeout(() => {
+                    history.replaceState(null, '', '/login?success=true');
+                }, 1000);
             }
         });
     </script>

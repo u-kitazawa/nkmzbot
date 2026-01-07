@@ -29,25 +29,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		http.Error(w, "missing code", http.StatusBadRequest)
-		return
-	}
-
+func (a *API) authenticateUser(code string) (string, string, string, error) {
 	// Exchange code for token
 	token, err := a.oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("token exchange failed: %v", err), http.StatusBadGateway)
-		return
+		return "", "", "", fmt.Errorf("token exchange failed: %w", err)
 	}
 
 	// Get user info
 	user, err := a.getDiscordUser(token.AccessToken)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get user: %v", err), http.StatusBadGateway)
-		return
+		return "", "", "", fmt.Errorf("failed to get user: %w", err)
 	}
 
 	// Create JWT
@@ -64,15 +56,30 @@ func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := jwtToken.SignedString(a.jwtSecret)
 	if err != nil {
-		http.Error(w, "failed to create token", http.StatusInternalServerError)
+		return "", "", "", fmt.Errorf("failed to create token: %w", err)
+	}
+
+	return tokenString, user.ID, getUsername(user), nil
+}
+
+func (a *API) handleCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	tokenString, userID, username, err := a.authenticateUser(code)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"token":    tokenString,
-		"user_id":  user.ID,
-		"username": getUsername(user),
+		"user_id":  userID,
+		"username": username,
 	})
 }
 
@@ -83,35 +90,18 @@ func (a *API) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Exchange code for token
-	token, err := a.oauthConfig.Exchange(context.Background(), code)
+	tokenString, _, _, err := a.authenticateUser(code)
 	if err != nil {
-		http.Redirect(w, r, "/login?error=token_exchange_failed", http.StatusSeeOther)
-		return
-	}
-
-	// Get user info
-	user, err := a.getDiscordUser(token.AccessToken)
-	if err != nil {
-		http.Redirect(w, r, "/login?error=failed_to_get_user", http.StatusSeeOther)
-		return
-	}
-
-	// Create JWT
-	claims := &Claims{
-		UserID:      user.ID,
-		Username:    user.Username,
-		AccessToken: token.AccessToken,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := jwtToken.SignedString(a.jwtSecret)
-	if err != nil {
-		http.Redirect(w, r, "/login?error=failed_to_create_token", http.StatusSeeOther)
+		// Redirect to login page with error
+		errorType := "authentication_failed"
+		if strings.Contains(err.Error(), "token exchange") {
+			errorType = "token_exchange_failed"
+		} else if strings.Contains(err.Error(), "failed to get user") {
+			errorType = "failed_to_get_user"
+		} else if strings.Contains(err.Error(), "failed to create token") {
+			errorType = "failed_to_create_token"
+		}
+		http.Redirect(w, r, "/login?error="+errorType, http.StatusSeeOther)
 		return
 	}
 
